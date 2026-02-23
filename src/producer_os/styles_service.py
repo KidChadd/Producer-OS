@@ -124,21 +124,26 @@ class StyleService:
             "Tip=*Styled by Producer OS"
         )
 
-    def write_nfo(self, target_dir: Path, name: str, style: Dict[str, any]) -> None:
-        """Write a `.nfo` file next to a folder if its contents differ.
-
-        ``target_dir`` is the parent directory containing the folder ``name``; the
-        resulting path will be ``target_dir/name.nfo``.  If the file
-        already exists and has identical contents no action is taken.
-        """
-        nfo_path = target_dir / f"{name}.nfo"
-        contents = self._nfo_contents(style)
-        # Only write if missing or changed
-        if nfo_path.exists():
-            existing = nfo_path.read_text(encoding="utf-8")
-            if existing.strip() == contents.strip():
-                return
-        nfo_path.write_text(contents, encoding="utf-8")
+    def write_nfo(self, folder_path: Path, name: str, style_dict: Dict[str, any]) -> None:
+    """Write .nfo file only if content differs (idempotent)."""
+    nfo_path = Path(folder_path) / f"{name}.nfo"
+    
+    # Build new content
+    new_content = json.dumps(style_dict, indent=2, sort_keys=True)
+    
+    # Check if file exists and has identical content
+    if nfo_path.exists():
+        try:
+            old_content = nfo_path.read_text(encoding="utf-8")
+            # Compare after normalization (ignore minor whitespace)
+            if old_content.strip() == new_content.strip():
+                return  # No change needed, don't write (preserve mtime)
+        except Exception:
+            pass  # If read fails, re-write it
+    
+    # Only write if new or different
+    nfo_path.parent.mkdir(parents=True, exist_ok=True)
+    nfo_path.write_text(new_content, encoding="utf-8")
 
     def compute_hash(self, style: Dict[str, any]) -> str:
         """Compute a hash of style values for caching or comparison."""

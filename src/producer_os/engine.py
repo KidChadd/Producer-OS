@@ -763,48 +763,56 @@ class ProducerOSEngine:
             dest = tmp_folder / file_path.name
             shutil.move(str(file_path), str(dest))
 
-    def _discover_packs(self) -> List[Path]:
-        """Return a list of pack directories within the inbox."""
-        packs = []
-        for entry in self.inbox_dir.iterdir():
-            if self._should_ignore(entry.name):
-                continue
-            if entry.is_dir():
-                packs.append(entry)
-        return packs
+    def run(self, mode: str = "analyze", ...):
+    # ... existing setup ...
+    
+    for pack_dir in packs:
+        # ... existing pack loop ...
+        
+        # CHANGE: Use os.walk and filter in-place
+        for root, dirs, files in os.walk(pack_dir):
+            # CRITICAL: Remove ignored directories in-place from dirs list
+            # This prevents os.walk from descending into them
+            dirs[:] = [d for d in dirs if not self._should_ignore(d)]
+            
+            # Filter files
+            files = [f for f in files if not self._should_ignore(f)]
+            
+            for file_path in [Path(root) / f for f in files]:
 
-    def _ensure_hub_structure(self, category: str, bucket: str, pack_name: str) -> Tuple[Path, Path, Path]:
-        """Ensure that the destination directories exist and write `.nfo` files.
+    def _ensure_hub_structure(self, category: str, bucket: str, pack_name: str):
+    """Create hub structure and write .nfo files (only in copy/move/repair modes)."""
+    category_dir = self.hub_dir / category
+    display_bucket = self.bucket_service.get_display_name(bucket)
+    bucket_dir = category_dir / display_bucket
+    pack_dir = bucket_dir / pack_name
+    
+    # Only create dirs and write .nfo in modes that modify the hub
+    if self.current_mode not in {"copy", "move", "repair-styles"}:
+        return category_dir, bucket_dir, pack_dir  # Return paths but don't create
+    
+    # Create directories
+    pack_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Write .nfo files
+    category_style = self.style_service.resolve_style(bucket, category)
+    self.style_service.write_nfo(self.hub_dir, category, category_style)
+    bucket_style = self.style_service.resolve_style(bucket, category)
+    self.style_service.write_nfo(category_dir, display_bucket, bucket_style)
+    pack_style = self.style_service.pack_style_from_bucket(bucket_style)
+    self.style_service.write_nfo(bucket_dir, pack_name, pack_style)
+    
+    return category_dir, bucket_dir, pack_dir
 
-        Returns a tuple of (category_dir, bucket_dir, pack_dir).
-        """
-        category_dir = self.hub_dir / category
-        # Use display name for bucket via bucket_service
-        display_bucket = self.bucket_service.get_display_name(bucket)
-        bucket_dir = category_dir / display_bucket
-        pack_dir = bucket_dir / pack_name
-        # Create directories
-        pack_dir.mkdir(parents=True, exist_ok=True)
-        # Write `.nfo` for category, bucket and pack using style service
-        category_style = self.style_service.resolve_style(bucket, category)
-        self.style_service.write_nfo(self.hub_dir, category, category_style)
-        bucket_style = self.style_service.resolve_style(bucket, category)
-        # Note: bucket .nfo goes next to category_dir
-        self.style_service.write_nfo(category_dir, display_bucket, bucket_style)
-        pack_style = self.style_service.pack_style_from_bucket(bucket_style)
-        # Pack .nfo goes next to bucket_dir (sibling to pack folder)
-        self.style_service.write_nfo(bucket_dir, pack_name, pack_style)
-        return category_dir, bucket_dir, pack_dir
-
-    def _ensure_unsorted_structure(self, pack_name: str) -> Path:
-        """Ensure that the UNSORTED folder exists for a pack and return its path."""
-        unsorted_dir = self.hub_dir / "UNSORTED" / pack_name
-        unsorted_dir.mkdir(parents=True, exist_ok=True)
-        # Write `.nfo` for UNSORTED category if not already
-        self.style_service.write_nfo(self.hub_dir, "UNSORTED", DEFAULT_UNSORTED_STYLE)
-        # Write `.nfo` for the pack in UNSORTED reusing default
-        self.style_service.write_nfo(self.hub_dir / "UNSORTED", pack_name, DEFAULT_UNSORTED_STYLE)
-        return unsorted_dir
+    def _ensure_unsorted_structure(self, pack_name: str):
+    unsorted_dir = self.hub_dir / "UNSORTED" / pack_name
+    
+    if self.current_mode not in {"copy", "move", "repair-styles"}:
+        return unsorted_dir  # Return path but don't create
+    
+    unsorted_dir.mkdir(parents=True, exist_ok=True)
+    # ... write .nfo files ...
+    return unsorted_dir
 
     def _move_or_copy(self, src: Path, dst: Path, mode: str) -> None:
         """Move or copy a file based on the selected mode."""
@@ -839,9 +847,9 @@ class ProducerOSEngine:
             ]
         )
 
-    def run(
-        self,
-        mode: str = "analyze",
+    def run(self, mode: str = "analyze", ...):
+    mode = mode.lower()
+    self.current_mode = mode
         overwrite_nfo: bool = False,
         normalize_pack_name: bool = False,
         developer_options: Optional[Dict[str, bool]] = None,
@@ -928,16 +936,21 @@ class ProducerOSEngine:
                             reason += "; candidates: " + ", ".join([f"{b}:{int(score)}" for b, score in candidates])
                     action = "NONE"
                     if mode in {"copy", "move"}:
-                        # Skip if file already exists at destination
-                        if dest_path.exists():
-                            reason += "; destination exists"
-                        else:
-                            self._move_or_copy(file_path, dest_path, mode)
-                            action = mode.upper()
-                            if mode == "move":
-                                report["files_moved"] += 1
-                            else:
-                                report["files_copied"] += 1
+    if dest_path.exists():
+        reason += "; destination exists"
+        action = "SKIPPED"
+    else:
+        # Only count if move/copy actually succeeds
+        try:
+            self._move_or_copy(file_path, dest_path, mode)
+            action = mode.upper()
+            if mode == "move":
+                report["files_moved"] += 1
+            else:
+                report["files_copied"] += 1
+        except Exception as e:
+            reason += f"; move/copy failed: {str(e)}"
+            action = "FAILED"
                     pack_report["files"].append(
                         {
                             "source": str(file_path),
