@@ -56,3 +56,56 @@ folders.  Switch to `move` when you’re confident everything is
 working correctly – you can always undo the last move.
 
 For more information see the in‑app help and documentation.
+
+### Running the GUI
+
+The GUI requires PySide6.  If it is not installed you will see an error
+message when launching.  Install it with:
+
+```bash
+pip install PySide6
+```
+
+Then run:
+
+```bash
+python -m producer_os.gui
+```
+
+The wizard will guide you through selecting your inbox (source) and hub
+(destination), choosing options such as move/copy, preserving vendor
+structure and theme, and running the analysis or sort.  Results and logs
+are displayed in the final step.  Use the developer tools toggle on the
+Options page to access the config folder, open the last report and
+validate JSON schemas.
+
+### Building an executable (brief)
+
+Producer OS can be bundled into a self‑contained Windows executable
+using Nuitka or PyInstaller.  The recommended approach is Nuitka
+because it produces faster, single‑folder deployments.  A simple
+workflow is:
+
+```bash
+nuitka --onefile --follow-imports --output-dir=dist src/producer_os/gui.py
+```
+
+Then create an installer (e.g. with Inno Setup) or zip the resulting
+folder for portable use.  The repository includes a GitHub Actions
+workflow that performs this build automatically on Windows runners.
+
+### Basic test plan
+
+1. **Dry run**: Select a small inbox and hub, enable “Dry run” and
+   click “Run”.  Verify that no files are moved or copied in the hub.
+2. **First real run**: Uncheck “Dry run”, choose “Copy” in Step 2
+   and click “Run”.  Confirm that files appear in the hub under the
+   expected category/bucket folders and that `.nfo` files are written
+   only next to folders (not next to individual WAVs).
+3. **Second run**: Without changing anything, click “Run” again.
+   Verify that the summary reports zero moved/copied files and no
+   duplicate “(2)” files are created – the operation is idempotent.
+
+This test plan ensures the GUI correctly drives the engine, that
+options are respected, and that nothing unexpected happens when
+running repeatedly.

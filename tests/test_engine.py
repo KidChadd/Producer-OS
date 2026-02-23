@@ -80,3 +80,117 @@ def test_idempotency(tmp_path):
     report2 = engine.run(mode="copy")
     second_moved = report2["files_copied"]
     assert second_moved == 0, "Second run should not copy any files"
+
+
+# ----------------------------------------------------------------------
+# New tests for hybrid classification
+
+import numpy as np
+import soundfile as sf
+
+def generate_sine(duration: float, sr: int = 44100, freq: float = 60.0) -> np.ndarray:
+    """Generate a pure sine wave for the given duration and frequency."""
+    t = np.linspace(0.0, duration, int(sr * duration), False)
+    return np.sin(2 * np.pi * freq * t)
+
+def generate_transient_kick(duration: float = 0.3, sr: int = 44100, freq: float = 60.0) -> np.ndarray:
+    """Generate a kick-like transient: strong attack and rapid decay."""
+    t = np.linspace(0.0, duration, int(sr * duration), False)
+    envelope = np.exp(-t * 8.0)
+    x = envelope * np.sin(2 * np.pi * freq * t)
+    # Emphasize the initial attack
+    attack_len = int(0.01 * sr)
+    if attack_len > 0:
+        x[:attack_len] *= 4.0
+    return x
+
+def generate_glide(duration: float = 1.0, sr: int = 44100, f_start: float = 65.0, f_end: float = 45.0) -> np.ndarray:
+    """Generate a decaying sine with a downward pitch glide."""
+    t = np.linspace(0.0, duration, int(sr * duration), False)
+    # Exponential frequency glide
+    ratio = f_end / f_start
+    inst_freq = f_start * (ratio ** (t / duration))
+    # Integrate instantaneous frequency to phase
+    phase = 2 * np.pi * np.cumsum(inst_freq) / sr
+    x = np.sin(phase) * np.exp(-t)  # apply decay envelope
+    return x
+
+def test_folder_hint_detection(tmp_path):
+    """Files in folders containing bucket keywords should receive strong folder hint."""
+    inbox = tmp_path / "inbox"
+    pack = inbox / "808sPack"
+    pack.mkdir(parents=True)
+    sr = 22050
+    x = generate_sine(0.5, sr)
+    (pack / "01.wav").parent.mkdir(parents=True, exist_ok=True)
+    sf.write(pack / "01.wav", x, sr)
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    style_service = StyleService(load_default_styles())
+    engine = ProducerOSEngine(inbox, hub, style_service, config={}, bucket_service=BucketService({}))
+    report = engine.run(mode="copy")
+    # Inspect the reported bucket for our file
+    packs = report["packs"]
+    found_bucket = None
+    for p in packs:
+        for f in p["files"]:
+            if f["source"].endswith("01.wav"):
+                found_bucket = f["bucket"]
+    assert found_bucket == "808s", f"Folder hint failed: expected '808s', got {found_bucket}"
+
+def test_audio_override_kick(tmp_path):
+    """Kick-like audio should override folder hint for 808s when evidence strong."""
+    inbox = tmp_path / "inbox"
+    pack = inbox / "808sFolder"
+    pack.mkdir(parents=True)
+    sr = 22050
+    x = generate_transient_kick(duration=0.3, sr=sr, freq=60.0)
+    sf.write(pack / "kicktest.wav", x, sr)
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    style_service = StyleService(load_default_styles())
+    engine = ProducerOSEngine(inbox, hub, style_service, config={}, bucket_service=BucketService({}))
+    report = engine.run(mode="copy")
+    found_bucket = None
+    for p in report["packs"]:
+        for f in p["files"]:
+            if f["source"].endswith("kicktest.wav"):
+                found_bucket = f["bucket"]
+    assert found_bucket == "Kicks", f"Audio override failed: expected 'Kicks', got {found_bucket}"
+
+def test_glide_detection(tmp_path):
+    """Tonal glide audio should be classified as 808s and detect glide."""
+    inbox = tmp_path / "inbox"
+    pack = inbox / "pack"
+    pack.mkdir(parents=True)
+    sr = 22050
+    x = generate_glide(duration=1.0, sr=sr, f_start=65.0, f_end=45.0)
+    sf.write(pack / "glide.wav", x, sr)
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    style_service = StyleService(load_default_styles())
+    engine = ProducerOSEngine(inbox, hub, style_service, config={}, bucket_service=BucketService({}))
+    # Use internal classification to inspect glide detection details
+    file_path = pack / "glide.wav"
+    bucket, category, confidence, candidates, low_confidence, reason = engine._classify_file(file_path)
+    assert bucket == "808s", f"Glide detection bucket mismatch: expected '808s', got {bucket}"
+    glide_summary = reason.get("glide_summary", {})
+    assert glide_summary.get("glide_detected", False), "Glide not detected for glide sample"
+
+def test_low_confidence_marking(tmp_path):
+    """Ambiguous noise should result in low confidence but still choose a bucket."""
+    inbox = tmp_path / "inbox"
+    pack = inbox / "noisePack"
+    pack.mkdir(parents=True)
+    # Generate random noise
+    sr = 22050
+    x = np.random.randn(int(sr * 0.5)) * 0.1
+    sf.write(pack / "noise.wav", x, sr)
+    hub = tmp_path / "hub"
+    hub.mkdir()
+    style_service = StyleService(load_default_styles())
+    engine = ProducerOSEngine(inbox, hub, style_service, config={}, bucket_service=BucketService({}))
+    bucket, category, confidence, candidates, low_confidence, reason = engine._classify_file(pack / "noise.wav")
+    assert low_confidence, "Noise sample should be marked as low confidence"
+    # Ensure a bucket is still chosen (not None)
+    assert bucket is not None, "Noise sample should still choose a bucket"
