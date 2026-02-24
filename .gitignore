@@ -1,35 +1,5 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-
-# Logs and reports
-logs/
-*.log
-
-# Virtual environment
-venv/
-.venv/
-
-# PyInstaller
-*.spec
-producer_os.exe
-producer_os/*/__pycache__/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Python caches
+﻿.venv*/
+build_*.build/
+build_*.dist/
 __pycache__/
 *.pyc
-.pytest_cache/
-
