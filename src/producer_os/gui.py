@@ -1,6 +1,5 @@
 ﻿"""
 Producer OS GUI Wizard
-======================
 
 This module implements a full wizard interface for Producer OS
 using PySide6.  The wizard guides the user through four steps:
@@ -672,5 +671,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

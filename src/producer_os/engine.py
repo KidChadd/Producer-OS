@@ -338,19 +338,25 @@ class ProducerOSEngine:
 
             max_val = float(np.max(np.abs(y))) if float(np.max(np.abs(y))) > 0 else 1.0
             y_norm = y / max_val
+            # Number of samples in the normalized signal
             n = len(y_norm)
+            # Duration in seconds
             duration = float(n) / float(sr)
             features["duration"] = duration
 
-                        # Frame params (adaptive for very short samples)
-            # Avoid librosa warnings and improve analysis of tiny one-shots.
+            # ------------------------------------------------------------------
+            # Frame parameters (adaptive for very short samples)
+            # Avoid librosa warnings and improve analysis of tiny one‑shots.
             win = 2048
-            if N <= 0:
+            # Clamp window length based on signal length
+            if n <= 0:
+                # Empty input; avoid negative or zero window sizes
                 win = 1
-            elif N < win:
-                win = N  # must not exceed signal length
+            elif n < win:
+                # Use the full signal length when it is shorter than the default window
+                win = n  # must not exceed signal length
 
-            # Keep hop proportional and valid
+            # Keep hop length proportional and valid
             hop = min(512, max(1, win // 4))
 
             S = np.abs(librosa.stft(y_norm, n_fft=win, hop_length=hop, window="hann"))
@@ -1127,54 +1133,3 @@ class ProducerOSEngine:
                     pass
 
         return actions
-
-        def ensure_write(parent: Path, name: str, style: Dict[str, Any]) -> None:
-            nfo_path = parent / f"{name}.nfo"
-            new_contents = self.style_service._nfo_contents(style)
-            if nfo_path.exists():
-                try:
-                    existing = nfo_path.read_text(encoding="utf-8").strip()
-                except Exception:
-                    existing = ""
-                if existing != new_contents.strip():
-                    self.style_service.write_nfo(parent, name, style)
-                    actions["updated"] += 1
-            else:
-                self.style_service.write_nfo(parent, name, style)
-                actions["created"] += 1
-
-        for category_dir in self.hub_dir.iterdir():
-            if not category_dir.is_dir() or self._should_ignore(category_dir.name):
-                continue
-
-            category = category_dir.name
-            # Category nfo in hub root
-            if category.upper() == "UNSORTED":
-                ensure_write(self.hub_dir, "UNSORTED", DEFAULT_UNSORTED_STYLE)
-            else:
-                # Use category fallback for color/icon if needed
-                style = self.style_service.resolve_style(category, category)
-                ensure_write(self.hub_dir, category, style)
-
-            for bucket_dir in category_dir.iterdir():
-                if not bucket_dir.is_dir() or self._should_ignore(bucket_dir.name):
-                    continue
-
-                display_bucket = bucket_dir.name
-                bucket_id = self.bucket_service.get_bucket_id(display_bucket) or display_bucket
-                bucket_style = self.style_service.resolve_style(bucket_id, category)
-
-                # Bucket nfo in category folder
-                ensure_write(category_dir, display_bucket, bucket_style)
-
-                # Pack nfo in bucket folder
-                pack_style = self.style_service.pack_style_from_bucket(bucket_style)
-                for pack_dir in bucket_dir.iterdir():
-                    if not pack_dir.is_dir() or self._should_ignore(pack_dir.name):
-                        continue
-                    ensure_write(bucket_dir, pack_dir.name, pack_style)
-
-        return actions
-
-
-

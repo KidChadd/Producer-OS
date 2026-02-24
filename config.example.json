@@ -1,0 +1,9 @@
+{
+  "inbox_dir": "C:/Path/To/Your/Inbox",
+  "hub_dir": "C:/Path/To/Your/Hub",
+  "vendor_structure_mode": "preserve-depth",
+  "preserve_depth_n": 2,
+  "audio_analysis_enabled": true,
+  "cache_enabled": true,
+  "log_verbose": false
+}
