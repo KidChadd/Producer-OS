@@ -216,3 +216,43 @@ class ConfigService:
             return (self.app_dir / "portable.flag").exists()
         except Exception:
             return False        
+# Backwards-compatible alias for GUI imports
+    def load_config(*args, **kwargs):
+        return read_config(*args, **kwargs)  # <-- change read_config to your real function name
+    
+    # --- module-level convenience wrappers (keeps GUI imports stable) ---
+
+# --- module-level convenience wrappers (keeps GUI imports stable) ---
+
+# --- module-level convenience wrappers (keeps GUI imports stable) ---
+
+from pathlib import Path
+
+_default_config_service = ConfigService(app_dir=Path(__file__).resolve().parent)
+
+def load_config(cli_portable: bool = False):
+    return _default_config_service.load_config(cli_portable=cli_portable)
+
+def save_config(cfg, cli_portable: bool = False):
+    return _default_config_service.save_config(cfg, cli_portable=cli_portable)
+
+def get_config_path(cli_portable: bool = False):
+    return _default_config_service.get_config_path(cli_portable=cli_portable)
+
+def get_styles_path(cli_portable: bool = False):
+    return _default_config_service.get_styles_path(cli_portable=cli_portable)
+
+def get_buckets_path(cli_portable: bool = False):
+    return _default_config_service.get_buckets_path(cli_portable=cli_portable)
+
+def load_styles(cli_portable: bool = False):
+    return _default_config_service.load_styles(cli_portable=cli_portable)
+
+def save_styles(styles, cli_portable: bool = False):
+    return _default_config_service.save_styles(styles, cli_portable=cli_portable)
+
+def load_buckets(cli_portable: bool = False):
+    return _default_config_service.load_buckets(cli_portable=cli_portable)
+
+def save_buckets(buckets, cli_portable: bool = False):
+    return _default_config_service.save_buckets(buckets, cli_portable=cli_portable)
