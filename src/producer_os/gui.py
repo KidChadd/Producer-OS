@@ -46,7 +46,7 @@ from typing import Any, Dict, Optional
 
 try:
     from PySide6.QtCore import Qt, QUrl, Signal, QObject
-    from PySide6.QtGui import QColor, QPalette, QDesktopServices, QDesktopServices
+    from PySide6.QtGui import QColor, QPalette, QDesktopServices
     from PySide6.QtWidgets import (
         QApplication,
         QMainWindow,
@@ -439,9 +439,9 @@ class ProducerOSWizard(QMainWindow):
     def validate_schemas(self) -> None:
         # Validate loaded config and styles against schemas and show result
         try:
-            cfg = self.config_service.load_config()
-            styles = self.config_service.load_styles()
-            buckets = self.config_service.load_buckets()
+            self.config_service.load_config()
+            self.config_service.load_styles()
+            self.config_service.load_buckets()
             QMessageBox.information(
                 self,
                 "Schema validation",

@@ -2,12 +2,8 @@ import json
 import os
 from pathlib import Path
 
-import sys
-import pytest
-
-# Add the src directory to sys.path so that producer_os can be imported
-SRC_DIR = Path(__file__).resolve().parents[1] / "src"
-sys.path.insert(0, str(SRC_DIR))
+import numpy as np
+import soundfile as sf
 
 from producer_os.engine import ProducerOSEngine
 from producer_os.styles_service import StyleService
@@ -74,8 +70,7 @@ def test_idempotency(tmp_path):
     bucket_service = BucketService({})
     engine = ProducerOSEngine(inbox, hub, style_service, config={}, bucket_service=bucket_service)
     # First run copies files
-    report1 = engine.run(mode="copy")
-    first_moved = report1["files_copied"]
+    engine.run(mode="copy")
     # Second run should not copy any additional files
     report2 = engine.run(mode="copy")
     second_moved = report2["files_copied"]
@@ -84,9 +79,6 @@ def test_idempotency(tmp_path):
 
 # ----------------------------------------------------------------------
 # New tests for hybrid classification
-
-import numpy as np
-import soundfile as sf
 
 def generate_sine(duration: float, sr: int = 44100, freq: float = 60.0) -> np.ndarray:
     """Generate a pure sine wave for the given duration and frequency."""

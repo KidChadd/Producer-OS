@@ -2,35 +2,32 @@ name: Python CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install package + dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install .[dev]
+          pip install -e ".[dev]"
 
-      - name: Run Ruff lint
+      - name: Ruff (lint)
         run: |
-          ruff producer_os
+          ruff check src tests
 
-      - name: Run mypy type checks
+      - name: Pytest
         run: |
-          mypy producer_os || true  # do not fail build on type hints yet
-
-      - name: Run tests
-        run: |
-          pytest -q
+          pytest -q --disable-warnings

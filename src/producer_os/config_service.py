@@ -28,13 +28,9 @@ from __future__ import annotations
 import json
 import os
 import platform
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-from json import JSONDecodeError
-from pathlib import Path
-from typing import Any
 
 try:
     import jsonschema
