@@ -1,0 +1,11 @@
+{
+  "theme": "dark",
+  "last_inbox_path": "C:/Users/chadp/Desktop/POS_TEST/INBOX",
+  "last_hub_root": "C:/Users/chadp/Desktop/POS_TEST/DEST",
+  "last_hub_name": "HUB",
+  "last_action_mode": "Move",
+  "inbox_path": "C:/Users/chadp/Desktop/POS_TEST/INBOX",
+  "hub_path": "C:/Users/chadp/Desktop/POS_TEST/DEST",
+  "action": "copy",
+  "developer_tools": true
+}
