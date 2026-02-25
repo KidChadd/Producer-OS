@@ -21,8 +21,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          python -m pip install PySide6
+          pip install -e ".[dev,gui]"
 
       - name: Lint
         run: ruff check src tests
@@ -36,27 +35,35 @@ jobs:
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           if (Test-Path build_gui_entry.build) { Remove-Item -Recurse -Force build_gui_entry.build }
 
-          python -m nuitka `
-            --standalone `
-            --enable-plugin=pyside6 `
-            --windows-console-mode=disable `
-            --output-dir=dist `
-            --output-filename=ProducerOS `
-            --include-package=producer_os `
-            --include-package=librosa `
-            --include-package=scipy `
-            --include-package=numba `
-            --include-package=llvmlite `
-            --include-module=soundfile `
-            --include-package-data=librosa `
-            --include-package-data=scipy `
-            --include-package-data=numba `
-            --include-package-data=llvmlite `
-            --include-module=sklearn `
-            --include-module=packaging `
-            --include-module=joblib `
-            --module-parameter=numba-disable-jit=yes `
-            build_gui_entry.py
+          $nuitkaArgs = @(
+            "--standalone",
+            "--enable-plugin=pyside6",
+            "--windows-console-mode=disable",
+            "--output-dir=dist",
+            "--output-filename=ProducerOS",
+            "--include-package=producer_os",
+            "--include-package=librosa",
+            "--include-package=scipy",
+            "--include-package=numba",
+            "--include-package=llvmlite",
+            "--include-module=soundfile",
+            "--include-package-data=librosa",
+            "--include-package-data=scipy",
+            "--include-package-data=numba",
+            "--include-package-data=llvmlite",
+            "--include-module=sklearn",
+            "--include-module=packaging",
+            "--include-module=joblib",
+            "--include-package=qdarktheme",
+            "--include-package-data=qdarktheme",
+            "--module-parameter=numba-disable-jit=yes"
+          )
+          if (Test-Path "assets\app_icon.ico") {
+            $nuitkaArgs += "--windows-icon-from-ico=assets/app_icon.ico"
+          }
+          $nuitkaArgs += "build_gui_entry.py"
+
+          python -m nuitka @nuitkaArgs
 
           # Zip the whole dist folder that contains the exe + DLLs
           if (Test-Path ProducerOS-windows.zip) { Remove-Item ProducerOS-windows.zip -Force }

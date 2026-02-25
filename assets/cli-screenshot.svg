@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" role="img" aria-labelledby="t d">
+  <title id="t">Producer-OS CLI Screenshot Placeholder</title>
+  <desc id="d">Placeholder image for Producer-OS CLI screenshot.</desc>
+  <rect width="1400" height="900" fill="#0b1220"/>
+  <rect x="70" y="60" width="1260" height="780" rx="16" fill="#111827" stroke="#374151" stroke-width="2"/>
+  <rect x="70" y="60" width="1260" height="52" rx="16" fill="#1f2937"/>
+  <circle cx="102" cy="86" r="8" fill="#ef4444"/>
+  <circle cx="126" cy="86" r="8" fill="#f59e0b"/>
+  <circle cx="150" cy="86" r="8" fill="#22c55e"/>
+  <g font-family="Consolas, 'Courier New', monospace" font-size="24">
+    <text x="110" y="170" fill="#93c5fd">PS C:\Producer-OS&gt; producer-os dry-run C:\Inbox C:\Hub --verbose</text>
+    <text x="110" y="225" fill="#86efac">Producer OS run_id=YYYYMMDD_HHMMSS_xxxxxxxx mode=dry-run</text>
+    <text x="110" y="270" fill="#e5e7eb">Hub: C:\Hub</text>
+    <text x="110" y="315" fill="#e5e7eb">Packs discovered: 12</text>
+    <text x="110" y="360" fill="#fcd34d">Processing pack: Example Kit</text>
+    <text x="110" y="405" fill="#fcd34d">Finished pack: Example Kit files=84</text>
+    <text x="110" y="470" fill="#cbd5e1">Done. processed=125 copied=0 moved=0 failed=0 unsorted=7 skipped=0</text>
+    <text x="110" y="550" fill="#94a3b8">Replace this file with an actual CLI screenshot</text>
+  </g>
+</svg>

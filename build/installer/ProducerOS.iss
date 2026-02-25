@@ -13,6 +13,9 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
+#ifexist "..\..\assets\app_icon.ico"
+SetupIconFile=..\..\assets\app_icon.ico
+#endif
 
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
