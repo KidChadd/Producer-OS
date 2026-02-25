@@ -1,36 +1,72 @@
+# Testing Guide
 
-### **Exact Location in README.md:**
-Add this **before the "Open source" line** at the end of the Features section, or **after the "Basic test plan" section**.
+This project uses `pytest`, `ruff`, and `mypy`. The core safety and engine
+behavior tests live in `tests/test_engine_rules.py` and `tests/test_engine.py`.
 
-Here's the exact diff format:
+## Local Setup
 
-```diff
-This test plan ensures the GUI correctly drives the engine, that
-options are respected, and that nothing unexpected happens when
-running repeatedly.
+```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
 
-+## Safety Guarantees & Hard Rules
-+
-+Producer OS is built on **deterministic, safe-by-default principles**:
-+
-+- **Safety by Default**: Default mode is ANALYZE (report only). COPY/MOVE are explicit.
-+- **Idempotent**: Running twice produces the same result; no duplicates.
-+- **Deterministic**: Same file → same bucket, always. No randomness.
-+- **Explainable**: Every decision logged with full reasoning.
-+- **Undo-Safe**: MOVE mode supports undo with conflict quarantine.
-+
-+For detailed rules, see [Rules & Usage](RULES_AND_USAGE.md).
-+
-+## Testing
-+
-+Run the comprehensive test suite:
-+
-+```bash
-+pytest tests/test_engine_rules.py -v
-+```
-+
-+This validates all 8 hard rules: NFO placement, idempotency, determinism, safety, undo, repair, portable mode, and classification transparency.
-+
-+For detailed testing instructions, see [Testing Guide](TESTING_GUIDE.md).
+If you are testing GUI changes:
 
-| Open source: Released under the GPL‑3.0‑or‑later license.
+```bash
+python -m pip install -e ".[dev,gui]"
+```
+
+## Quick Checks
+
+```bash
+python -m ruff check src tests
+python -m pytest -q
+```
+
+## Full Local Validation (CI Parity)
+
+```bash
+python -m ruff check src tests
+python -m mypy src/producer_os
+python -m pytest -q --disable-warnings
+python -m pip install --upgrade build
+python -m build
+```
+
+## Focused Engine Rule Tests
+
+Use this when working on routing, safety guarantees, styles, undo, or portable
+mode logic:
+
+```bash
+python -m pytest -q tests/test_engine_rules.py
+```
+
+## GUI Smoke Test
+
+```bash
+producer-os-gui
+```
+
+Or via module entrypoint:
+
+```bash
+python -m producer_os gui
+```
+
+Recommended manual smoke checks:
+
+- Open the wizard and switch between all four steps
+- Run `Analyze` on a small test inbox/hub
+- Run `Copy` (or `Move` in a disposable test folder)
+- Save the run report from the Run page
+- Open config folder / last report from Developer Tools
+
+## GitHub Actions Workflows
+
+- `python.yml`: Ruff, Mypy, Pytest, package build (push/PR on `main`)
+- `build.yml`: manual Windows EXE build artifact (Nuitka)
+- `release.yml`: tag-triggered Windows release build (`v*.*.*`)
+- `version.yml`: semantic-release automation on pushes to `main`

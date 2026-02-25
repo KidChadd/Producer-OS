@@ -29,6 +29,7 @@ nuitka-crash-report.xml
 # OS
 .DS_Store
 Thumbs.db
+[Dd]esktop.ini
 
 # Keep the installer script tracked (even though build/ is ignored)
 !build/

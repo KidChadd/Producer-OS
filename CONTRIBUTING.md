@@ -7,14 +7,21 @@ help us maintain a friendly and productive community.
 
 ## Getting Started
 
-1. **Install dependencies**: This project uses Python ≥3.9. We recommend
+1. **Install dependencies**: This project uses Python >=3.11. We recommend
    creating a virtual environment and installing dependencies with pip:
 
    ```bash
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
+   python -m pip install --upgrade pip
    python -m pip install -e ".[dev]"
    python -m pytest -q
+   ```
+
+   If you are changing the desktop GUI, install GUI extras as well:
+
+   ```bash
+   python -m pip install -e ".[dev,gui]"
    ```
 
 2. **Run tests**: Before making changes, ensure the existing test suite
@@ -43,8 +50,8 @@ help us maintain a friendly and productive community.
   type checking. Run these locally before submitting:
 
   ```bash
-  ruff producer_os
-  mypy producer_os
+  python -m ruff check src tests
+  python -m mypy src/producer_os
   ```
 
 * **Sign your work**: Include a clear description of your changes in the

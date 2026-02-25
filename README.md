@@ -81,6 +81,8 @@ python -m pip install --upgrade pip
 pip install -e ".[gui]"
 ```
 
+For a CLI-only install, use `pip install -e .` instead.
+
 ---
 
 # Run
@@ -171,7 +173,13 @@ Producer-OS uses structured JSON configuration files:
 - `buckets.json`
 - `bucket_styles.json`
 
-All configurations are validated against JSON schemas before execution.  
+By default, these are stored in the platform config directory (for example,
+`%APPDATA%\ProducerOS` on Windows). Use `--portable` or place a `portable.flag`
+file next to the app to keep configuration local to the app/hub folder.
+
+Starter examples are provided in `examples/`.
+
+All configurations are validated against JSON schemas before execution.
 Invalid configurations block execution.
 
 ---
@@ -198,12 +206,12 @@ Producer-OS enforces:
 
 # Continuous Integration
 
-GitHub Actions runs:
+GitHub Actions workflows include:
 
-- Ruff (lint)  
-- Mypy (type checking)  
-- Pytest  
-- Package build validation  
+- `python.yml` (push/PR on `main`): Ruff, Mypy, Pytest, wheel/sdist build
+- `build.yml` (manual): Windows EXE build artifact (Nuitka)
+- `version.yml` (push to `main`): semantic-release version/tag automation
+- `release.yml` (tag push `v*.*.*`): Windows portable zip + installer release
 
 ---
 
@@ -213,6 +221,8 @@ GitHub Actions runs:
 - `TESTING_GUIDE.md`  
 - `SUPPORT.md`  
 - `CONTRIBUTING.md`  
+- `SECURITY.md`
+- `CODE_OF_CONDUCT.md`
 
 ---
 

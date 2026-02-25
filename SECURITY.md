@@ -2,7 +2,12 @@
 
 ## Supported Versions
 
-The latest 0.1.x release is currently supported with security updates.
+Security fixes are handled on a best-effort basis for:
+
+- The latest tagged release
+- The current `main` branch
+
+Older releases may not receive security updates.
 
 ## Reporting a Vulnerability
 
