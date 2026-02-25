@@ -34,7 +34,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
-          python -m pip install nuitka==2.8.10
+          python -m pip uninstall -y nuitka
+          python -m pip install --no-cache-dir nuitka==2.8.10
+          python -m nuitka --version
 
       - name: Ruff + Tests
         shell: pwsh

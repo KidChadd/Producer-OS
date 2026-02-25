@@ -7,3 +7,9 @@ __pycache__/
 *.pyc
 .nuitka_tmp/
 tree_*.txt
+
+# Keep the installer script tracked (even though build/ is ignored)
+!build/
+!build/installer/
+!build/installer/**
+!build/installer/ProducerOS.iss
