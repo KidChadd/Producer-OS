@@ -3,8 +3,7 @@ name: Build (Windows EXE)
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches: [ "main" ]
 
 permissions:
   contents: write
@@ -70,9 +69,3 @@ jobs:
         with:
           name: ProducerOS-windows
           path: ProducerOS-windows.zip
-
-      - name: Create GitHub Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ProducerOS-windows.zip
