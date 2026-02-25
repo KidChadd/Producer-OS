@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.0.2 (2026-02-25)
+
+### Bug Fixes
+
+- **types**: Resolve mypy errors in engine and gui
+  ([`91b81b0`](https://github.com/KidChadd/Producer-OS/commit/91b81b0e74917a976721c38b8a517bcf67930ce7))
+
+
 ## v0.0.1 (2026-02-25)
 
 - Initial Release
