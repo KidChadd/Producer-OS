@@ -1,91 +1,83 @@
-name: Release (Windows Portable + Installer)
+name: Release (Windows)
 
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch:
+      - "v*.*.*"
 
 permissions:
   contents: write
 
 jobs:
-  release-windows:
+  build:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        shell: pwsh
+        run: |
+          $tag = "${env:GITHUB_REF_NAME}"
+          $ver = $tag.TrimStart("v")
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install Python deps
+      - name: Install dependencies
         shell: pwsh
         run: |
-          python -m pip install -U pip setuptools wheel
-          python -m pip install "nuitka==2.8.10"
-          pip install -e ".[dev]"
-          python -m pip install PySide6
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+          python -m pip install nuitka==2.8.10
 
-      - name: Lint + tests
+      - name: Ruff + Tests
         shell: pwsh
         run: |
-          ruff check src tests
-          pytest -q --disable-warnings
+          python -m ruff check .
+          python -m pytest
 
-      - name: Build Portable (Nuitka standalone)
+      - name: Build standalone (Nuitka)
         shell: pwsh
         run: |
-          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          if (Test-Path build_gui_entry.build) { Remove-Item -Recurse -Force build_gui_entry.build }
-
           python -m nuitka `
-            --standalone `
-            --enable-plugin=pyside6 `
-            --windows-console-mode=disable `
+            --mode=standalone `
+            --assume-yes-for-downloads `
             --output-dir=dist `
             --output-filename=ProducerOS `
             build_gui_entry.py
 
-          if (!(Test-Path "dist\build_gui_entry.dist\ProducerOS.exe")) {
-            Write-Host "ProducerOS.exe not found."
-            Get-ChildItem dist -Recurse | Select-Object FullName
-            exit 1
-          }
-
-      - name: Zip Portable build
+      - name: Zip portable
         shell: pwsh
         run: |
-          $zip = "ProducerOS-Windows-Portable.zip"
+          $zip = "ProducerOS-${env:VERSION}-portable-win64.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path "dist\build_gui_entry.dist\*" -DestinationPath $zip -Force
+          Compress-Archive -Path "dist\build_gui_entry.dist\*" -DestinationPath $zip
+          "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Install Inno Setup
+      - name: Build installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.6
+        with:
+          path: build/installer/ProducerOS.iss
+          options: /DMyAppVersion=${{ env.VERSION }}
+
+      - name: Verify artifacts exist
         shell: pwsh
         run: |
-          choco install innosetup -y
+          if (!(Test-Path $env:PORTABLE_ZIP)) { throw "Portable ZIP missing: $env:PORTABLE_ZIP" }
+          $installer = "dist\ProducerOS-Setup-${env:VERSION}.exe"
+          if (!(Test-Path $installer)) { throw "Installer missing: $installer" }
 
-      - name: Build Installer (Inno Setup)
-        shell: pwsh
-        run: |
-          $iss = "producer_os\producer_os_installer.iss"
-          if (!(Test-Path $iss)) { throw "Installer script not found: $iss" }
-
-          iscc $iss
-
-          # Find the newest installer exe produced by Inno
-          $installer = Get-ChildItem -Recurse -Filter *.exe |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1 -ExpandProperty FullName
-
-          Copy-Item $installer "ProducerOS-Setup.exe" -Force
-
-      - name: Create GitHub Release + upload assets
+      - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
           files: |
-            ProducerOS-Windows-Portable.zip
-            ProducerOS-Setup.exe
+            ${{ env.PORTABLE_ZIP }}
+            dist/ProducerOS-Setup-${{ env.VERSION }}.exe

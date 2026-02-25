@@ -41,13 +41,16 @@ from __future__ import annotations
 
 import sys
 import threading
-import json
-
+from producer_os.engine import ProducerOSEngine
+from producer_os.styles_service import StyleService
+from producer_os.config_service import ConfigService
+from producer_os.bucket_service import BucketService
 from pathlib import Path
 from typing import Any, Dict, Optional
 SortConfig = Dict[str, Any]
 
 try:
+    
     from PySide6.QtCore import Qt, QUrl, Signal, QObject
     from PySide6.QtGui import QColor, QPalette, QDesktopServices
     from PySide6.QtWidgets import (
@@ -68,8 +71,6 @@ try:
         QFormLayout,
         QMessageBox,
     )
-    import PySide6
-except ImportError:
     # PySide6 is optional; if not installed the GUI cannot be used.
     PySide6 = None  # type: ignore
 

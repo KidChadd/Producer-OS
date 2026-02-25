@@ -221,13 +221,10 @@ class ConfigService:
 # --- module-level convenience wrappers (keeps GUI imports stable) ---
 
 def load_config(*args, **kwargs):
-    return _default_config_service.load_config(*args, **kwargs)
+    return config_service.load_config(*args, **kwargs)
 
 def save_config(*args, **kwargs):
-    return _default_config_service.save_config(*args, **kwargs)
-
-from pathlib import Path
-import sys
+    return config_service.save_config(*args, **kwargs)
 
 def get_app_dir() -> Path:
     # Frozen exe (Nuitka/onefile/standalone) -> folder containing the exe
