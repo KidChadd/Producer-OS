@@ -1,4 +1,4 @@
-name: Release (Windows EXE)
+name: Release (Windows Portable + Installer)
 
 on:
   push:
@@ -10,20 +10,23 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  release-windows:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install deps
+      - name: Install Python deps
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install -U pip setuptools wheel
+          python -m pip install "nuitka==2.8.10"
           pip install -e ".[dev]"
           python -m pip install PySide6
 
@@ -33,7 +36,7 @@ jobs:
           ruff check src tests
           pytest -q --disable-warnings
 
-      - name: Build (Nuitka standalone folder)
+      - name: Build Portable (Nuitka standalone)
         shell: pwsh
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
@@ -45,17 +48,44 @@ jobs:
             --windows-console-mode=disable `
             --output-dir=dist `
             --output-filename=ProducerOS `
-            --include-package=producer_os `
             build_gui_entry.py
 
-      - name: Zip dist folder
+          if (!(Test-Path "dist\build_gui_entry.dist\ProducerOS.exe")) {
+            Write-Host "ProducerOS.exe not found."
+            Get-ChildItem dist -Recurse | Select-Object FullName
+            exit 1
+          }
+
+      - name: Zip Portable build
         shell: pwsh
         run: |
-          $out = "ProducerOS-Windows.zip"
-          if (Test-Path $out) { Remove-Item $out -Force }
-          Compress-Archive -Path "dist\build_gui_entry.dist\*" -DestinationPath $out
+          $zip = "ProducerOS-Windows-Portable.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "dist\build_gui_entry.dist\*" -DestinationPath $zip -Force
 
-      - name: Create GitHub Release + upload ZIP
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+
+      - name: Build Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iss = "producer_os\producer_os_installer.iss"
+          if (!(Test-Path $iss)) { throw "Installer script not found: $iss" }
+
+          iscc $iss
+
+          # Find the newest installer exe produced by Inno
+          $installer = Get-ChildItem -Recurse -Filter *.exe |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          Copy-Item $installer "ProducerOS-Setup.exe" -Force
+
+      - name: Create GitHub Release + upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: ProducerOS-Windows.zip
+          files: |
+            ProducerOS-Windows-Portable.zip
+            ProducerOS-Setup.exe
