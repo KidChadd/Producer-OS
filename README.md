@@ -1,129 +1,298 @@
-# Producer OS
+```markdown
+# 🎛 Producer OS
 
-Producer OS is a desktop tool for organising music sample packs and
-applying FL Studio folder styling via `.nfo` sidecar files.  It
-provides a wizard‑driven GUI experience backed by a deterministic
-engine and a command‑line interface for power users.  The default
-behaviour is safe and idempotent – it copies files rather than
-moving them, never deletes user content and logs every decision.
+> A structured sample management system built for serious music producers.
 
-## Features
+Producer OS transforms chaotic sample libraries into a clean, categorized, production-ready hub.
 
-- **Wizard GUI**: Step through inbox selection, hub location,
-  options and run/repair pages with a modern PySide6 interface.
-- **CLI**: Perform `analyze`, `dry-run`, `copy`, `move`,
-  `repair-styles`, `preview-styles`, `doctor` and `undo-last-run`
-  operations from the terminal.
-- **Deterministic routing**: Files are classified into fixed buckets
-  based on simple string‑matching rules with a confidence score.  Low
-  confidence files are routed to an `UNSORTED` folder.  Decisions
-  and scores are recorded in an audit log when moving files.
-- **Style system**: Bucket and category styles are defined in
-  `bucket_styles.json` and applied to category, bucket and pack
-  folders via `.nfo` files.  Missing styles fall back to sensible
-  defaults and never interrupt execution.
-- **Bucket renames**: Users can rename buckets via `buckets.json`
-  without affecting the internal classification.  Renamed folders
-  remain properly styled and repair runs reconcile any mismatches.
-- **Idempotent and safe**: Re‑running on the same inbox/hub pair
-  performs no duplicate actions.  Move operations are fully
-  undoable via an audit trail.  A repair mode regenerates missing
-  styles and removes orphans without touching audio files.
-- **Portable or AppData modes**: Settings, styles and bucket
-  mappings live in `%APPDATA%/ProducerOS` by default.  Create a
-  `portable.flag` file next to the executable to store them in
-  the application directory.
-- **Open source**: Released under the GPL‑3.0‑or‑later license.
+Designed for:
+- FL Studio users
+- Organized creatives
+- Power producers with large libraries
+- Developers who value transparent logic
 
-## Quickstart
+---
 
-Install the package and run the CLI:
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![Build](https://img.shields.io/badge/Build-Nuitka-purple)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-```bash
-python -m producer_os.cli analyze /path/to/inbox /path/to/hub
+---
+
+# 🚀 Why Producer OS Exists
+
+Most producers collect thousands of samples.
+
+Over time:
+- Folders get messy  
+- Packs overlap  
+- Duplicates multiply  
+- Vendor structure becomes inconsistent  
+- Retrieval slows down creativity  
+
+Producer OS solves this without destroying your original structure.
+
+It doesn’t just sort files.
+
+It builds a **production system.**
+
+---
+
+# 🧠 Core Capabilities
+
+### 📦 Pack Wrapping
+Loose files are automatically grouped into structured pack folders.
+
+### 🗂 Intelligent Bucket Routing
+Samples are categorized into:
+
+- Drum Kits
+- Samples
+- FL Projects
+- MIDI Packs
+- Presets
+- UNSORTED
+- Quarantine
+
+Routing is based on:
+- File extensions
+- Folder keywords
+- Confidence scoring
+- Safety thresholds
+
+---
+
+### 🔍 Transparent Logging
+Every run generates:
+
 ```
 
-Or launch the GUI (requires PySide6):
+logs/<run_id>/
 
-```bash
-python -m producer_os.gui
 ```
 
-The first time you run Producer OS it will ask for your inbox and
-hub folders.  Subsequent runs remember your settings.  Use the
-`copy` command to organise your packs without altering the inbox
-folders.  Switch to `move` when you’re confident everything is
-working correctly – you can always undo the last move.
+With:
+- Detailed move report
+- Reasoning for bucket decisions
+- Skipped file explanations
+- Confidence breakdown (developer mode)
 
-For more information see the in‑app help and documentation.
+Nothing happens silently.
 
-### Running the GUI
+---
 
-The GUI requires PySide6.  If it is not installed you will see an error
-message when launching.  Install it with:
+### 🔐 Safety by Default
 
-```bash
-pip install PySide6
+Producer OS will NEVER:
+
+- Delete your files by default
+- Overwrite without logging
+- Destroy vendor structure
+- Reprocess already organized packs
+- Trust low-confidence matches
+
+Low-confidence files go to:
+
 ```
 
-Then run:
+UNSORTED
 
-```bash
-python -m producer_os.gui
 ```
 
-The wizard will guide you through selecting your inbox (source) and hub
-(destination), choosing options such as move/copy, preserving vendor
-structure and theme, and running the analysis or sort.  Results and logs
-are displayed in the final step.  Use the developer tools toggle on the
-Options page to access the config folder, open the last report and
-validate JSON schemas.
+Suspicious input goes to:
 
-### Building an executable (brief)
-
-Producer OS can be bundled into a self‑contained Windows executable
-using Nuitka or PyInstaller.  The recommended approach is Nuitka
-because it produces faster, single‑folder deployments.  A simple
-workflow is:
-
-```bash
-nuitka --onefile --follow-imports --output-dir=dist src/producer_os/gui.py
 ```
 
-Then create an installer (e.g. with Inno Setup) or zip the resulting
-folder for portable use.  The repository includes a GitHub Actions
-workflow that performs this build automatically on Windows runners.
+Quarantine
 
-### Basic test plan
+```
 
-1. **Dry run**: Select a small inbox and hub, enable “Dry run” and
-   click “Run”.  Verify that no files are moved or copied in the hub.
-2. **First real run**: Uncheck “Dry run”, choose “Copy” in Step 2
-   and click “Run”.  Confirm that files appear in the hub under the
-   expected category/bucket folders and that `.nfo` files are written
-   only next to folders (not next to individual WAVs).
-3. **Second run**: Without changing anything, click “Run” again.
-   Verify that the summary reports zero moved/copied files and no
-   duplicate “(2)” files are created – the operation is idempotent.
+You remain in control.
 
-This test plan ensures the GUI correctly drives the engine, that
-options are respected, and that nothing unexpected happens when
-running repeatedly.
-## Safety Guarantees & Hard Rules
+---
 
-Producer OS is built on **deterministic, safe-by-default principles**:
+# 🖥 GUI Experience
 
-- **Safety by Default**: Default mode is ANALYZE (report only). COPY/MOVE are explicit.
-- **Idempotent**: Running twice produces the same result; no duplicates.
-- **Deterministic**: Same file → same bucket, always. No randomness.
-- **Explainable**: Every decision logged with full reasoning.
-- **Undo-Safe**: MOVE mode supports undo with conflict quarantine.
+Producer OS includes a wizard-based interface:
 
-For detailed rules, see [Rules & Usage](RULES_AND_USAGE.md).
+1. Select Inbox folder
+2. Select Hub folder
+3. Choose options
+4. Run distribution
 
-## Testing
+### 🎨 Theme System
+- System
+- Dark
+- Light
 
-Run the comprehensive test suite:
+Theme preference persists between runs.
 
-```bash
-pytest tests/test_engine_rules.py -v
+---
+
+# 🧩 Architecture Overview
+
+Producer OS is built with strict separation of concerns:
+
+```
+
+UI Layer        → Input & Display
+Engine          → Sorting Logic
+Services        → Config / Styles / Buckets
+CLI             → Headless Execution
+Tests           → Validation
+
+```
+
+No mega scripts.
+No hidden behavior.
+
+---
+
+# 🔁 First Run vs Second Run
+
+### First Run
+- Wrap loose files
+- Distribute to buckets
+- Generate structured log
+
+### Second Run
+- Detect already processed packs
+- Skip duplicates
+- Log skipped operations
+- No "(2)" folder spam
+
+It is designed to be rerun safely.
+
+---
+
+# 🧪 Developer Mode
+
+When enabled:
+
+- Displays rule scoring
+- Shows bucket confidence
+- Outputs matching breakdown
+- Provides detailed reasoning in logs
+
+Built for transparency.
+
+---
+
+# 📂 Example Hub Structure
+
+```
+
+Hub/
+├── Drum Kits/
+│    └── PackName/
+├── Samples/
+│    └── PackName/
+├── FL Projects/
+├── MIDI Packs/
+├── Presets/
+├── UNSORTED/
+└── Quarantine/
+
+```
+
+Each bucket can have:
+- Custom icon
+- Custom color
+- Optional NFO metadata
+
+---
+
+# 📦 Installation
+
+## Development
+
+```
+
+pip install -r requirements.txt
+python -m producer_os.producer_os_app
+
+```
+
+## Build Executable (Nuitka)
+
+```
+
+python -m nuitka 
+--standalone 
+--enable-plugin=pyside6 
+--windows-console-mode=disable 
+build_gui_entry.py
+
+```
+
+---
+
+# 🧭 Project Philosophy
+
+Producer OS follows strict development rules:
+
+- Safety > Speed
+- Logging > Guessing
+- Structure > Chaos
+- Iteration > Rush
+- Clarity > Cleverness
+
+Changes follow a controlled workflow:
+1. Define goal
+2. List changes
+3. Define test plan
+4. Approve (“go”)
+5. Implement
+6. Verify
+7. Repeat
+
+---
+
+# 🔓 Open Source Commitment
+
+Producer OS is:
+
+- Fully open source
+- Transparent in logic
+- Designed for extension
+- Built for long-term maintainability
+
+We welcome contributions — see `CONTRIBUTING.md`.
+
+---
+
+# 🛣 Roadmap
+
+Planned expansions:
+
+- Waveform-based classification
+- BPM & key detection scoring
+- Preset metadata parsing
+- Advanced duplicate detection
+- Rule editor inside GUI
+- CI validation pipeline
+- Plugin-aware routing
+
+---
+
+# 🎯 Who This Is For
+
+If you:
+
+- Have 50+ sample packs
+- Hate messy folders
+- Care about clean systems
+- Want reproducible structure
+- Value transparent logic
+
+Producer OS was built for you.
+
+---
+
+Producer OS isn’t just a sorter.
+
+It’s the foundation of a clean production environment.
+```
+
+---
