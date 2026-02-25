@@ -71,15 +71,11 @@ try:
         QFormLayout,
         QMessageBox,
     )
-    # PySide6 is optional; if not installed the GUI cannot be used.
-    PySide6 = None  # type: ignore
-
-from producer_os.engine import ProducerOSEngine
-from producer_os.styles_service import StyleService
-from producer_os.config_service import ConfigService
-from producer_os.bucket_service import BucketService
-
-print("Producer OS GUI starting...")
+# PySide6 is required for the GUI module.
+except ImportError as e:
+    raise RuntimeError(
+        "PySide6 is required to run Producer OS GUI. Install it (e.g. `pip install PySide6`)."
+    ) from e
 
 class EngineRunner(QObject):
     """Helper to run the engine on a background thread.
@@ -132,11 +128,7 @@ class ProducerOSWizard(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        if PySide6 is None:
-            # Show an error if PySide6 is not installed
-            raise ImportError(
-                "PySide6 is not installed. Please install PySide6 to use the GUI."
-            )
+
         self.setWindowTitle("Producer OS Wizard")
         self.resize(800, 600)
         # Configuration
@@ -664,16 +656,14 @@ class ProducerOSWizard(QMainWindow):
 
 
 def main() -> int:
-    # create QApplication, show window, exec
     """Entry point for launching the GUI from the command line."""
-    if PySide6 is None:
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ModuleNotFoundError:
         print("Error: PySide6 is not installed. Please install PySide6 to use the GUI.")
         return 1
+
     app = QApplication(sys.argv)
     wizard = ProducerOSWizard()
     wizard.show()
     return app.exec()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

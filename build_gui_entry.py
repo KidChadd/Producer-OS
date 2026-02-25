@@ -1,19 +1,12 @@
 # build_gui_entry.py
+from __future__ import annotations
+
 import os
-import sys
-from pathlib import Path
 
 # Disable numba JIT (important for frozen builds)
 os.environ.setdefault("NUMBA_DISABLE_JIT", "1")
 
-ROOT = Path(__file__).resolve().parent
-SRC = ROOT / "src"
-
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-import sys
-from producer_os.gui import main
+from producer_os.gui import main  # noqa: E402
 
 if __name__ == "__main__":
     raise SystemExit(main())
