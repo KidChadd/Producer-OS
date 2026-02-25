@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Producer-OS: Dry-run (example folders)",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "producer_os.cli",
+        "dry-run",
+        "${workspaceFolder}\\_inbox",
+        "${workspaceFolder}\\_hub",
+        "--verbose"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: pytest",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "pytest", "-q"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint: ruff",
+      "type": "shell",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "ruff", "check", "src", "tests"],
+      "problemMatcher": []
+    }
+  ]
+}

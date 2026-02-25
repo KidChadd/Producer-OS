@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Producer-OS: CLI (help)",
+      "type": "python",
+      "request": "launch",
+      "module": "producer_os.cli",
+      "args": ["--help"],
+      "console": "integratedTerminal",
+      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+    },
+    {
+  "name": "Producer-OS: GUI",
+  "type": "python",
+  "request": "launch",
+  "module": "producer_os.gui",
+  "console": "integratedTerminal",
+  "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+}

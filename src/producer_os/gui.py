@@ -663,7 +663,8 @@ def main() -> int:
     win = ProducerOSWizard()
     win.show()
 
-    return app.exec()
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        return app.exec()
+    except KeyboardInterrupt:
+        # If the user stops the process from the terminal, exit cleanly.
+        return 0
