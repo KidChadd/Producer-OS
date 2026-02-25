@@ -1,12 +1,34 @@
-﻿.venv*/
-dist*/
-build*/
-*.build
-*.dist
+﻿# DocuWriter / local analysis artifacts
+docuwriter_upload/
+ProducerOS-docuwriter-upload.zip
+tree.clean.txt
+
+# Virtual environments
+.venv*/
+env*/
+
+# Python cache
 __pycache__/
 *.pyc
-.nuitka_tmp/
-tree_*.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build outputs
+dist*/
+build*/
+.nuitka*/
+
+# Packaging
+*.egg-info/
+
+# Logs
+*.log
+nuitka-crash-report.xml
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Keep the installer script tracked (even though build/ is ignored)
 !build/

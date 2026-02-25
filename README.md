@@ -1,462 +1,246 @@
-```markdown
 <p align="center">
-  <h1 align="center">Producer OS</h1>
-  <p align="center">
-    Structured sample management.
-  </p>
+  <img src="assets/banner.png" alt="Producer OS Banner" />
 </p>
 
+<p align="center"><strong>Rule-based sample pack and project file organizer for serious music producers.</strong></p>
+
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-blue" />
-  <img src="https://img.shields.io/badge/Build-Nuitka-purple" />
-  <img src="https://img.shields.io/badge/License-MIT-green" />
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+" />
+  </a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">
+    <img src="https://img.shields.io/badge/License-GPL--3.0-green" alt="GPL-3.0 License" />
+  </a>
+  <img src="https://img.shields.io/badge/Status-Active%20Development-orange" alt="Active Development" />
 </p>
 
 ---
 
-## Overview
+> Current Version: 0.x (Active Development)
 
-Producer OS is a structured system for organizing sample packs and production assets.
-
-It transforms unstructured folders into a clean, repeatable hub layout — without destructive behavior.
-
-Designed for long-term use.
-
----
-
-## Core Principles
-
-- Safe by default  
-- Transparent in operation  
-- Re-runnable without duplication  
-- Strict separation of responsibilities  
-- Logging-first architecture  
+Producer-OS is a Python desktop application for organizing sample packs and project files with a rule-based engine. It offers both a PySide6 GUI and a command-line interface.
 
 ---
 
 ## What It Does
 
-- Wraps loose files into pack folders  
-- Routes content into defined buckets  
-- Preserves vendor structure (optional)  
-- Logs every action  
-- Quarantines uncertain input  
-- Avoids reprocessing organized packs  
+Producer-OS organizes music production assets using JSON-defined rules. It reads configuration files and assigns files to defined buckets. Unknown or suspicious files go to UNSORTED or Quarantine locations. All file actions are logged for later inspection.
 
 ---
 
-## Output Structure
+## 🎯 Why Producer OS?
 
-```
-
-Hub/
-├── Drum Kits/
-├── Samples/
-├── FL Projects/
-├── MIDI Packs/
-├── Presets/
-├── UNSORTED/
-└── Quarantine/
-
-```
-
-Clean. Predictable. Repeatable.
+Most file organizers rely mainly on extensions or simple folder patterns. Producer-OS uses rule-based logic, JSON schema validation, and controlled execution modes for every action. It focuses on predictable, explainable, and safe sorting behavior. It is built for producers who want automation without sacrificing control.
 
 ---
 
-## Architecture
+## Features
 
-```
-
-UI Layer        → User interaction
-Engine          → Sorting logic
-Services        → Config / Styles / Buckets
-CLI             → Headless execution
-Tests           → Validation
-
-````
-
-No combined responsibilities.
+- Python desktop application for music producers.
+- PySide6-based GUI for interactive control and visualization.
+- CLI interface for scripted and headless workflows.
+- Rule-based sorting engine for sample packs and project files.
+- JSON configuration files: `buckets.json`, `bucket_styles.json`, `config.json`.
+- Configuration validation using JSON schemas before performing file operations.
+- Safety features including UNSORTED and Quarantine handling for unmatched or unsafe files.
+- Detailed logging of all file operations and decisions.
+- Support for both GUI and CLI workflows using the same configuration and rules.
 
 ---
 
-## Execution
+## 🖼 Interface Preview
 
-Development:
+(Screenshot or demo GIF coming soon)
+
+---
+
+## Demo
+
+![Demo](assets/demo.gif)
+
+---
+
+## Screenshots
+
+![Screenshot](assets/screenshot.png)
+
+---
+
+## Quick Start
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://github.com/KidChadd/Producer-OS.git
+    cd Producer-OS
+    ```
+
+2. Install dependencies:
+
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+    pip install -r requirements.txt
+    ```
+
+3. Run the GUI:
+
+    ```bash
+    python -m producer_os
+    ```
+
+4. Run the CLI:
+
+    ```bash
+    python -m producer_os.cli --help
+    ```
+
+---
+
+## Architecture Overview
+
+Producer-OS is structured as a modular Python application. It separates responsibilities across a sorting engine, supporting services, user interfaces, and schemas. The engine evaluates rules from JSON configurations and classifies files. Services handle filesystem access, logging, and interaction with configuration and schema data. The PySide6 GUI and CLI call into the same engine and services, while JSON schemas define and validate configuration structures.
+
+```mermaid
+flowchart TD
+    subgraph EngineLayer [Engine]
+        Engine[Rule based sorting engine]
+    end
+
+    subgraph ServicesLayer [Services]
+        FileService[File system service]
+        LogService[Logging service]
+        ConfigService[Configuration service]
+    end
+
+    subgraph InterfacesLayer [User Interfaces]
+        Gui[PySide6 desktop GUI]
+        Cli[Command line interface]
+    end
+
+    subgraph SchemasLayer [Schemas]
+        JsonConfigs[JSON configs\nbuckets bucket_styles config]
+        JsonSchemas[JSON schema definitions]
+    end
+
+    Gui --> Engine
+    Cli --> Engine
+
+    Engine --> FileService
+    Engine --> LogService
+    Engine --> ConfigService
+
+    ConfigService --> JsonConfigs
+    ConfigService --> JsonSchemas
+```
+
+---
+
+## Usage
+
+You can use Producer-OS through the PySide6 GUI or the CLI. Both interfaces rely on the same JSON configuration files and rule-based engine.
+
+To launch the GUI:
 
 ```bash
-pip install -r requirements.txt
-python -m producer_os.producer_os_app
-````
-
-Build (Nuitka):
-
-```bash
-python -m nuitka --standalone --enable-plugin=pyside6 build_gui_entry.py
+python -m producer_os
 ```
 
+To use the CLI and see available commands:
+
+```bash
+python -m producer_os.cli --help
+```
+
+To run a sorting operation from the CLI with an explicit configuration:
+
+```bash
+python -m producer_os.cli sort --config path/to/config.json
+```
+
+All file moves, copies, and safety-related actions are logged to the output defined by your configuration.
+
 ---
 
-## Safety Model
+## Configuration
 
-* No deletion by default
-* Low-confidence → `UNSORTED`
-* Suspicious input → `Quarantine`
-* All actions logged
+Producer-OS uses JSON configuration files to describe buckets, styles, and global behavior. The primary configuration files are:
+
+- `config.json` – global settings, paths, and runtime options.
+- `buckets.json` – logical buckets and rules describing which files belong where.
+- `bucket_styles.json` – styling and presentation details for buckets in the GUI.
+
+Before any sorting run, Producer-OS validates these JSON files against JSON schemas. If a configuration does not match its schema, the application reports validation errors and does not perform file actions. Safety routing to UNSORTED and Quarantine is controlled by configuration fields within these JSON files.
+
+### Safety Model
+
+Producer-OS enforces several safety guarantees during execution:
+
+- No file deletion by default; operations focus on moving or copying.  
+- Files that do not match any rule are sent to an UNSORTED bucket.  
+- Files marked or detected as problematic route to a Quarantine location.  
+- All actions and decisions are logged for later inspection.  
+- JSON schema validation runs before sorting and blocks invalid configurations.
 
 ---
 
-## Re-Run Behavior
+## Requirements
 
-First run:
+- Python 3.x installed on your system.
+- A desktop environment capable of running PySide6 (Windows, macOS, or Linux).
+- Required Python packages listed in `requirements.txt`.
+- Access to the directories that contain your sample packs and project files.
 
-* Distributes content
+---
 
-Second run:
+## Documentation
 
-* Skips previously processed packs
-* Prevents duplication
+Additional documentation is available in the repository:
 
-Designed for repeated execution.
+- `RULES_AND_USAGE.md` – details on rule definitions and typical workflows.
+- `TESTING_GUIDE.md` – guidance for running and extending the test suite.
+- `SUPPORT.md` – notes on getting help and reporting issues.
+- `CONTRIBUTING.md` – contribution guidelines and code expectations.
 
 ---
 
 ## Roadmap
 
-* Waveform-based classification
-* BPM / key detection
-* Rule editor in UI
-* Advanced duplicate detection
+Planned and ongoing work includes:
+
+- Expanded rule primitives for more detailed file classification.  
+- Additional bucket presets for common DAW and sample pack layouts.  
+- In-application editors for bucket, style, and configuration files.  
+- Enhanced dry-run and diff reporting for planned actions.  
+- Richer GUI tooling for browsing logs and reviewing previous runs.
 
 ---
 
-Producer OS is not a script.
+## FAQ
 
-It is a structured production environment.
+**Does Producer-OS delete files?**  
+By default, Producer-OS does not delete files. It focuses on moving or copying based on rules.
 
-```
+**Can I customize buckets and styles?**  
+Yes. You define buckets in `buckets.json` and visual styles in `bucket_styles.json`.
 
----
+**Does it support CLI automation?**  
+Yes. The CLI interface supports scripted runs, making it suitable for automation workflows.
 
-# 🎯 Why This Works Better
+**Is configuration validated before sorting?**  
+Yes. All JSON configuration files are validated against JSON schemas before any file actions run.
 
-- Short sentences
-- No fluff
-- Clear hierarchy
-- Minimal emotion
-- Controlled tone
-- White space
-- Quiet confidence
-
-It now feels like:
-- A productivity tool
-- A system
-- Intentional software
-- Not a hobby project
-
----
-Say **“Ultra minimal”** if you want to push it even cleaner.
-```
-=======
----
-
-# 📄 `/README.md` (Premium Version)
-
-```markdown
-# 🎛 Producer OS
-
-> A structured sample management system built for serious music producers.
-
-Producer OS transforms chaotic sample libraries into a clean, categorized, production-ready hub.
-
-Designed for:
-- FL Studio users
-- Organized creatives
-- Power producers with large libraries
-- Developers who value transparent logic
+**Does the GUI and CLI share the same engine?**  
+Yes. Both interfaces use the same rule-based engine, services, and configuration layer.
 
 ---
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![Build](https://img.shields.io/badge/Build-Nuitka-purple)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Active-brightgreen)
+## Contributing
+
+Contributions are welcome. Please fork the repository and create a feature branch from the main branch. Make your changes with clear, descriptive commit messages and keep changes focused. Open a pull request describing your changes and how they relate to Producer-OS behavior.
 
 ---
 
-# 🚀 Why Producer OS Exists
+## License
 
-Most producers collect thousands of samples.
-
-Over time:
-- Folders get messy  
-- Packs overlap  
-- Duplicates multiply  
-- Vendor structure becomes inconsistent  
-- Retrieval slows down creativity  
-
-Producer OS solves this without destroying your original structure.
-
-It doesn’t just sort files.
-
-It builds a **production system.**
-
----
-
-# 🧠 Core Capabilities
-
-### 📦 Pack Wrapping
-Loose files are automatically grouped into structured pack folders.
-
-### 🗂 Intelligent Bucket Routing
-Samples are categorized into:
-
-- Drum Kits
-- Samples
-- FL Projects
-- MIDI Packs
-- Presets
-- UNSORTED
-- Quarantine
-
-Routing is based on:
-- File extensions
-- Folder keywords
-- Confidence scoring
-- Safety thresholds
-
----
-
-### 🔍 Transparent Logging
-Every run generates:
-
-```
-
-logs/<run_id>/
-
-```
-
-With:
-- Detailed move report
-- Reasoning for bucket decisions
-- Skipped file explanations
-- Confidence breakdown (developer mode)
-
-Nothing happens silently.
-
----
-
-### 🔐 Safety by Default
-
-Producer OS will NEVER:
-
-- Delete your files by default
-- Overwrite without logging
-- Destroy vendor structure
-- Reprocess already organized packs
-- Trust low-confidence matches
-
-Low-confidence files go to:
-
-```
-
-UNSORTED
-
-```
-
-Suspicious input goes to:
-
-```
-
-Quarantine
-
-```
-
-You remain in control.
-
----
-
-# 🖥 GUI Experience
-
-Producer OS includes a wizard-based interface:
-
-1. Select Inbox folder
-2. Select Hub folder
-3. Choose options
-4. Run distribution
-
-### 🎨 Theme System
-- System
-- Dark
-- Light
-
-Theme preference persists between runs.
-
----
-
-# 🧩 Architecture Overview
-
-Producer OS is built with strict separation of concerns:
-
-```
-
-UI Layer        → Input & Display
-Engine          → Sorting Logic
-Services        → Config / Styles / Buckets
-CLI             → Headless Execution
-Tests           → Validation
-
-```
-
-No mega scripts.
-No hidden behavior.
-
----
-
-# 🔁 First Run vs Second Run
-
-### First Run
-- Wrap loose files
-- Distribute to buckets
-- Generate structured log
-
-### Second Run
-- Detect already processed packs
-- Skip duplicates
-- Log skipped operations
-- No "(2)" folder spam
-
-It is designed to be rerun safely.
-
----
-
-# 🧪 Developer Mode
-
-When enabled:
-
-- Displays rule scoring
-- Shows bucket confidence
-- Outputs matching breakdown
-- Provides detailed reasoning in logs
-
-Built for transparency.
-
----
-
-# 📂 Example Hub Structure
-
-```
-
-Hub/
-├── Drum Kits/
-│    └── PackName/
-├── Samples/
-│    └── PackName/
-├── FL Projects/
-├── MIDI Packs/
-├── Presets/
-├── UNSORTED/
-└── Quarantine/
-
-```
-
-Each bucket can have:
-- Custom icon
-- Custom color
-- Optional NFO metadata
-
----
-
-# 📦 Installation
-
-## Development
-
-```
-
-pip install -r requirements.txt
-python -m producer_os.producer_os_app
-
-```
-
-## Build Executable (Nuitka)
-
-```
-
-python -m nuitka 
---standalone 
---enable-plugin=pyside6 
---windows-console-mode=disable 
-build_gui_entry.py
-
-```
-
----
-
-# 🧭 Project Philosophy
-
-Producer OS follows strict development rules:
-
-- Safety > Speed
-- Logging > Guessing
-- Structure > Chaos
-- Iteration > Rush
-- Clarity > Cleverness
-
-Changes follow a controlled workflow:
-1. Define goal
-2. List changes
-3. Define test plan
-4. Approve (“go”)
-5. Implement
-6. Verify
-7. Repeat
-
----
-
-# 🔓 Open Source Commitment
-
-Producer OS is:
-
-- Fully open source
-- Transparent in logic
-- Designed for extension
-- Built for long-term maintainability
-
-We welcome contributions — see `CONTRIBUTING.md`.
-
----
-
-# 🛣 Roadmap
-
-Planned expansions:
-
-- Waveform-based classification
-- BPM & key detection scoring
-- Preset metadata parsing
-- Advanced duplicate detection
-- Rule editor inside GUI
-- CI validation pipeline
-- Plugin-aware routing
-
----
-
-# 🎯 Who This Is For
-
-If you:
-
-- Have 50+ sample packs
-- Hate messy folders
-- Care about clean systems
-- Want reproducible structure
-- Value transparent logic
-
-Producer OS was built for you.
-
----
-
-Producer OS isn’t just a sorter.
-
-It’s the foundation of a clean production environment.
-```
-
----
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See the `LICENSE` file for more information.
