@@ -227,6 +227,27 @@ To test actual signing locally, set the environment variables in your shell firs
 - Publish/check `SHA256SUMS.txt` with each release and verify local rebuilds when troubleshooting
 - Keep commit messages aligned with Conventional Commits so version bumps happen predictably
 
+## GitHub Maintenance Checklist
+
+Use this checklist after release and workflow changes to keep repository settings, docs, and release metadata aligned.
+
+1. Verify repository **About** metadata (description + homepage URL) is populated and accurate.
+2. Verify repository topics remain intentional and free of overlapping duplicates.
+3. Verify README community links match enabled GitHub tabs (for example, Discussions).
+4. Verify `pyproject.toml` package version matches the latest release tag line.
+5. Verify release assets are present for the latest release:
+   - portable ZIP
+   - installer EXE
+   - `SHA256SUMS.txt`
+   - `SIGNING_STATUS.txt`
+   - `BUILD_INFO.txt`
+   - `BUILD_TIMING.txt`
+6. Verify `SIGNING_STATUS.txt` reflects the actual signed/unsigned release state.
+7. Verify `SHA256SUMS.txt` hashes match downloaded release artifacts.
+8. Verify `python.yml` remains the required quality gate for merges to `main`.
+9. Verify Windows build/release smoke checks still pass (`GUI` smoke + `tiny-analyze` smoke).
+10. Review CI/security workflows (`CodeQL`, `Scorecard`, `Dependabot`) and address new findings.
+
 ## Related Files
 
 - `.github/workflows/version.yml`
