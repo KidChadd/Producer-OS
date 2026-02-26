@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.6 (2026-02-26)
+
+### Bug Fixes
+
+- Escape artifact variable in signing script logs
+  ([`3e46bbe`](https://github.com/KidChadd/Producer-OS/commit/3e46bbee6c9a5b87ea8cc3877c54bf44f80ede4d))
+
+
 ## v0.6.5 (2026-02-26)
 
 ### Bug Fixes
