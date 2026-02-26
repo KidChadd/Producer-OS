@@ -26,6 +26,7 @@ python -m pip install -e ".[dev,gui]"
 python -m pytest -q
 python -m ruff check src tests
 python -m mypy src/producer_os
+python -m pytest -q tests/test_gui_spec_lock.py
 producer-os --help
 producer-os-gui
 ```
@@ -64,6 +65,7 @@ Conventions:
 python -m pytest -q
 python -m ruff check src tests
 python -m mypy src/producer_os
+python -m pytest -q tests/test_gui_spec_lock.py
 ```
 
 Optional (recommended):
@@ -108,6 +110,7 @@ If Discussions are not yet enabled, use the issue template contact links or `SUP
 - Hybrid classification is currently `.wav`-only
 - GUI features may require `.[gui]` extras
 - Windows release packaging changes should be validated in CI workflows
+- GUI shell/page structure changes should keep `tests/test_gui_spec_lock.py` passing (or update the baseline intentionally)
 - Use `examples/synthetic_corpus/` when you need a shareable repro set
 
 ## Helpful References

@@ -1,6 +1,30 @@
-# Bucket Customization (Names, Colors, Icons)
+# UI and Bucket Customization
 
-This document explains how to customize bucket display names and FL Studio folder style appearance in Producer-OS.
+This document explains how to customize app appearance settings and bucket display/style metadata in Producer-OS.
+
+## App Appearance (Theme, Density, Accent)
+
+Use the GUI `Options` page `Appearance` card to customize the UI presentation.
+
+Available controls:
+
+- theme preset (`System`, `Studio Dark`, `Paper Light`, `Midnight Blue`)
+- density mode (`Comfortable`, `Compact`)
+- accent mode:
+  - `Theme Default`
+  - preset accent
+  - custom accent color
+- theme preview cards (click to apply a preset)
+
+Notes:
+
+- Appearance changes apply immediately.
+- Appearance settings are stored in `config.json`.
+- These settings only affect the GUI and do not change classifier behavior or routing rules.
+
+## Bucket Customization (Names, Colors, Icons)
+
+The `Bucket Customization` card in `Options` controls bucket presentation and FL Studio folder style appearance.
 
 ## What You Can Customize
 
@@ -30,6 +54,8 @@ Notes:
 
 - Use `Reload bucket customizations` to discard unsaved edits and reload from disk.
 - Use `Pick color for selected row` to choose a color visually.
+- Use `Pick icon for selected row` to open the searchable icon picker (with manual code entry fallback).
+- Use `Reset selected row` or `Reset all` to revert staged edits back to the loaded values.
 - Bucket style changes affect future style writes (`.nfo` generation/repair).
 
 ## Where Settings Are Stored

@@ -58,15 +58,17 @@ What it does:
 
 - checks out the repo (and selected tag for manual dispatch)
 - installs Python + dependencies
-- runs Ruff and tests
+- runs a minimal import preflight for release dependencies
 - builds a standalone Windows app (Nuitka)
 - runs a packaged GUI smoke test (launch + timed exit)
+- runs a packaged tiny-analyze smoke test against `examples/synthetic_corpus`
 - builds a portable ZIP
 - builds an installer (Inno Setup)
 - optionally signs Windows artifacts (portable EXE + installer) when signing secrets are configured
 - verifies artifacts exist
 - generates and uploads `SHA256SUMS.txt` for release artifacts
 - generates and uploads `SIGNING_STATUS.txt` (signed vs unsigned transparency)
+- generates and uploads `BUILD_INFO.txt` and `BUILD_TIMING.txt` (build provenance/timing)
 - uploads assets to the GitHub Release
 - enables GitHub-generated release notes (`generate_release_notes: true`)
 
@@ -84,6 +86,8 @@ Input:
 
 The workflow checks out the exact tag and rebuilds artifacts for that version.
 
+Manual dispatch also overlays the latest shared CI build scripts from `origin/main` before building so packaging/build-script fixes can be applied to older tags without changing the release version.
+
 ## Manual Windows Build (Non-Release)
 
 Use `build.yml` when you want a Windows EXE artifact without publishing a GitHub Release.
@@ -91,8 +95,26 @@ Use `build.yml` when you want a Windows EXE artifact without publishing a GitHub
 This workflow:
 
 - runs on `workflow_dispatch`
+- supports `ref` input (branch/tag/SHA)
+- supports `build_profile` input (`dev` / `release`)
 - builds a Windows standalone package with Nuitka
+- runs full lint/tests (unlike `release.yml`)
 - uploads a zip artifact to the workflow run
+- uploads `BUILD_INFO.txt`, `BUILD_TIMING.txt`, and `SIGNING_STATUS.txt`
+
+## Build Profiles (`build_windows_nuitka.ps1`)
+
+The shared build script supports:
+
+- `release` profile (used by `release.yml`)
+- `dev` profile (available in `build.yml` for faster iteration)
+
+The script also:
+
+- performs an MSVC `cl.exe` preflight check (fast-fail locally)
+- auto-discovers MSVC on GitHub-hosted runners when `cl.exe` is not on `PATH`
+- excludes known upstream test modules from Nuitka standalone builds to reduce compile graph size
+- enables parallel C compilation (`--jobs`) based on runner CPU count unless overridden
 
 ## Release Notes / Patch Notes
 
@@ -127,16 +149,34 @@ The release workflow also generates `SIGNING_STATUS.txt`, which records the Auth
 
 This makes it obvious whether a release was signed or built in unsigned/placeholders mode.
 
-## Packaged GUI Smoke Test (CI)
+## Packaged GUI + Tiny-Analyze Smoke Tests (CI)
 
-The shared Windows build script (`.github/scripts/build_windows_nuitka.ps1`) now performs a post-build smoke test of the packaged executable:
+The shared Windows build script (`.github/scripts/build_windows_nuitka.ps1`) performs post-build runtime checks of the packaged executable:
 
 - verifies `qwindows.dll` exists
 - runs `ProducerOS.exe` with `PRODUCER_OS_SMOKE_TEST=1`
 - the GUI launches and exits automatically after a short timer
-- CI fails if startup crashes or the process hangs
+- runs `ProducerOS.exe` with `PRODUCER_OS_SMOKE_TINY_ANALYZE=1` against `examples/synthetic_corpus`
+- verifies the tiny-analyze smoke JSON output and processed file count
+- CI fails if startup crashes, hangs, or packaged runtime analyze behavior fails
 
 This catches packaging/runtime issues that file-existence checks alone cannot catch.
+
+## Build Timing and Provenance Artifacts
+
+Windows build/release workflows upload:
+
+- `BUILD_INFO.txt` (build profile, repo root, script source, git SHA/ref, Nuitka args)
+- `BUILD_TIMING.txt` (Nuitka phase timing + workflow timing rows)
+
+`BUILD_TIMING.txt` includes values such as:
+
+- `nuitka_total_seconds`
+- `python_level_compile_seconds`
+- `scons_c_compile_and_link_seconds`
+- workflow-level dependency/install and installer timings
+
+Use these artifacts to identify whether build time is dominated by Python-level analysis, C compilation/linking, or installer time before making CI changes.
 
 ## Optional Code Signing (Placeholder Integration)
 
@@ -180,6 +220,8 @@ To test actual signing locally, set the environment variables in your shell firs
 - Prefer the automated version flow (`version.yml`) for normal releases
 - Avoid manually creating tags unless you have a specific reason
 - If a release build fails, re-run `release.yml` (manual dispatch) for the same tag
+- Use `build.yml` with `build_profile=dev` for iteration; reserve `release.yml` for tagged releases
+- Review `BUILD_TIMING.txt` before changing Nuitka inputs/exclusions
 - Publish/check `SHA256SUMS.txt` with each release and verify local rebuilds when troubleshooting
 - Keep commit messages aligned with Conventional Commits so version bumps happen predictably
 

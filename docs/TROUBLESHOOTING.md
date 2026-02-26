@@ -60,6 +60,42 @@ It also displays:
 - audio dependency check summary
 - latest Qt plugin check result
 
+## `qt.multimedia.ffmpeg` Startup Line Appears in Terminal
+
+Symptom:
+
+- The GUI prints a line like:
+  - `qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version ...`
+
+This is informational and expected when QtMultimedia/FFmpeg backend support is available.
+
+It is not a crash and does not indicate a routing/classification error.
+
+## Run Review Audio Preview / Waveform Is Unavailable
+
+Symptom:
+
+- The `Low Confidence Review` details panel loads, but audio preview controls are disabled or waveform preview is unavailable
+
+Possible causes:
+
+- GUI dependencies were installed without the `gui` extras
+- QtMultimedia backend support is unavailable in the current environment
+- The selected row points to a file path that no longer exists
+
+Fix:
+
+```powershell
+pip install -e ".[gui]"
+```
+
+Then restart the GUI and re-open the report.
+
+Notes:
+
+- Audio preview/waveform is a GUI review convenience; it does not affect classification results.
+- The rest of the review workflow (filters, overrides, hints, export) still works without audio preview.
+
 ## Bucket Name / Color / Icon Changes Did Not Apply
 
 Symptom:
@@ -116,6 +152,12 @@ What to do:
 - Check `top_3_candidates`
 - Tune keyword mappings / bucket vocab
 - Tune classifier thresholds/weights (advanced)
+
+GUI review tips:
+
+- Use the batch action buttons to override multiple selected rows at once
+- Use the row context menu to filter by selected pack/bucket, copy paths, or open file locations
+- Very large review sets may use a lighter table mode to preserve responsiveness
 
 ## Audio Features Seem Missing / Weak Classification
 
@@ -189,6 +231,47 @@ Current behavior:
 Recommendation:
 
 - Let `version.yml` own version tags unless you are intentionally rebuilding an existing tag via manual release dispatch
+
+## Windows Release Build Timed Out (Nuitka)
+
+Symptom:
+
+- A `Release (Windows)` run spends a long time in Nuitka/SCons compilation and hits the workflow timeout
+
+Current mitigations in the project:
+
+- `build_windows_nuitka.ps1` excludes upstream test modules from standalone builds
+- `--jobs` is enabled for parallel C compilation
+- release workflow runs packaged GUI + tiny-analyze smoke tests instead of rerunning full lint/test suites
+- `BUILD_TIMING.txt` is uploaded to releases/build artifacts for timing analysis
+
+What to do:
+
+1. Use `BUILD_TIMING.txt` to confirm where the time is spent (`python` compile vs `SCons` compile/link)
+2. Use `build.yml` with `build_profile=dev` for iteration
+3. Use `release.yml` only for tagged release builds
+4. Rebuild old tags via manual `release.yml` dispatch when CI script fixes were made after the original tag
+
+See:
+
+- [`docs/RELEASE_PROCESS.md`](RELEASE_PROCESS.md)
+
+## `cl.exe` Not Found When Running the Windows Build Script Locally
+
+Symptom:
+
+- `.github/scripts/build_windows_nuitka.ps1` fails immediately with an MSVC `cl.exe` preflight error
+
+Cause:
+
+- The shell is not running with the Visual Studio C++ toolchain environment initialized
+
+Fix:
+
+- Open a Visual Studio Developer PowerShell / Command Prompt, or
+- run `VsDevCmd.bat` before invoking the build script
+
+The script now fails fast locally with a clear message and can auto-detect MSVC on GitHub-hosted runners.
 
 ## Download Verification (Checksums)
 

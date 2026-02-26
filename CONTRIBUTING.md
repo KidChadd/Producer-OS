@@ -48,7 +48,9 @@ Start here for the fastest setup path:
   default bucket definitions without discussing with the maintainers.
 
 * **Write tests**: New features should include tests under the `tests/`
-  directory. Use pytest and fixtures when appropriate.
+  directory. Use pytest and fixtures when appropriate. If you intentionally
+  change GUI structure/layout wiring, update the GUI spec-lock baseline and
+  keep `tests/test_gui_spec_lock.py` passing.
 
 * **Style and typing**: We use `ruff` for linting and `mypy` for static
   type checking. Run these locally before submitting:
@@ -56,6 +58,7 @@ Start here for the fastest setup path:
   ```bash
   python -m ruff check src tests
   python -m mypy src/producer_os
+  python -m pytest -q tests/test_gui_spec_lock.py
   ```
 
 * **Pre-commit hooks (recommended)**: Install and enable the local hooks to

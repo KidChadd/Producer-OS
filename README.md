@@ -47,6 +47,10 @@ Network access is only needed for things like downloading releases, cloning the 
 - Shared engine for GUI and CLI
 - Confidence scoring with low-confidence flagging and top-3 candidates
 - GUI low-confidence review queue with override + hint-save workflow
+- Run review split-pane with sticky details, audio preview, and waveform
+- Batch review actions + row context menu for faster review cleanup
+- Appearance controls (theme presets, density mode, accent presets/custom accent, theme previews)
+- Run-page layout persistence (splitter, columns, sort, filters, selected tab)
 - Explainable per-file reasoning in `run_report.json` (log-writing modes)
 - Feature caching via `feature_cache.json`
 - `benchmark-classifier` command for distribution/confusion audits and tuning
@@ -91,6 +95,7 @@ Download the latest Windows builds from [GitHub Releases](https://github.com/Kid
 - Portable ZIP (`ProducerOS-<version>-portable-win64.zip`)
 - Installer (`ProducerOS-Setup-<version>.exe`)
 - `SHA256SUMS.txt` (checksums for release artifact verification)
+- `BUILD_INFO.txt` and `BUILD_TIMING.txt` (release build provenance/timing)
 
 Releases: [github.com/KidChadd/Producer-OS/releases](https://github.com/KidChadd/Producer-OS/releases)
 
@@ -139,7 +144,8 @@ producer-os-gui
 Recommended first run:
 
 - Start with `analyze`
-- Review the `Low Confidence Review` tab
+- Review the `Low Confidence Review` tab (audio preview/waveform, batch actions, context menu)
+- Optional: open `Options` -> `Appearance` to pick a theme, density, and accent
 - Optional: open `Options` -> `Bucket Customization` to adjust bucket names/colors/icons
 - Save hints/overrides, then rerun before `copy` or `move`
 
@@ -172,6 +178,12 @@ Use `Options` -> `Bucket Customization`, then rerun `copy`, `move`, or `repair-s
 
 See [`docs/CUSTOMIZATION.md`](docs/CUSTOMIZATION.md) for accepted color/icon formats and validation rules.
 
+The `Options` page also includes appearance customization:
+
+- theme preset (`System`, `Studio Dark`, `Paper Light`, `Midnight Blue`)
+- density (`Comfortable`, `Compact`)
+- accent mode (`Theme Default`, preset accents, or custom accent color)
+
 ## Documentation
 
 ### Technical Docs (`docs/`)
@@ -187,6 +199,7 @@ See [`docs/CUSTOMIZATION.md`](docs/CUSTOMIZATION.md) for accepted color/icon for
 - [`docs/COMPATIBILITY_POLICY.md`](docs/COMPATIBILITY_POLICY.md) - compatibility and deprecation policy
 - [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md) - CLI commands, flags, and benchmark usage
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - engine/UI/services architecture and data flow
+- [`docs/GUI_RECREATION_SPEC_LOCK.md`](docs/GUI_RECREATION_SPEC_LOCK.md) - structural GUI baseline/spec-lock validation tooling
 
 ### Project Docs (Root)
 

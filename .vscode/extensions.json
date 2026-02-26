@@ -1,6 +1,11 @@
 {
-    "recommendations": [
-        "ms-python.vscode-pylance",
-        "ms-python.python"
-    ]
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "ms-python.mypy-type-checker",
+    "charliermarsh.ruff",
+    "redhat.vscode-yaml",
+    "ms-vscode.powershell"
+  ]
 }

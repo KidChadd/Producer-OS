@@ -3,18 +3,56 @@
   "configurations": [
     {
       "name": "Producer-OS: CLI (help)",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
-      "module": "producer_os.cli",
-      "args": ["--help"],
+      "module": "producer_os",
+      "args": [
+        "--help"
+      ],
       "console": "integratedTerminal",
-      "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+      "python": "${config:python.defaultInterpreterPath}",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}\\src",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
     },
     {
-  "name": "Producer-OS: GUI",
-  "type": "python",
-  "request": "launch",
-  "module": "producer_os.gui",
-  "console": "integratedTerminal",
-  "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+      "name": "Producer-OS: GUI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "producer_os",
+      "args": [
+        "gui"
+      ],
+      "console": "integratedTerminal",
+      "python": "${config:python.defaultInterpreterPath}",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}\\src",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    },
+    {
+      "name": "Producer-OS: GUI (Smoke)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "producer_os",
+      "args": [
+        "gui"
+      ],
+      "console": "integratedTerminal",
+      "python": "${config:python.defaultInterpreterPath}",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}\\src",
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PRODUCER_OS_SMOKE_TEST": "1",
+        "PRODUCER_OS_SMOKE_TEST_MS": "400"
+      }
+    }
+  ]
 }

@@ -27,13 +27,21 @@ Primary layers:
 2. `ProducerOSWindow` loads config, styles, and bucket mappings via `ConfigService`
 3. User selects inbox/hub/options and triggers `Analyze` or `Run`
 4. `ProducerOSWindow.start_engine_run()` creates `ProducerOSEngine` and starts `EngineRunner`
-5. `EngineRunner` runs the engine in a background thread and emits `(report, report_path)`
+5. `EngineRunner` runs the engine in a background thread and emits:
+   - `finished(report, report_path)`
+   - `logLine(str)`
+   - `progressEvent(dict)`
 6. `RunPage` displays:
    - summary stats
    - pack breakdown
-   - low-confidence review queue
+   - low-confidence review split-pane (table + sticky details)
+   - batch review actions + context menu
+   - audio preview + waveform for selected review rows (QtMultimedia when available)
+   - delegated confidence/bucket/top-3 rendering
+   - visual status rail driven by structured progress events
    - reasoning/details per file
 7. `OptionsPage` also exposes bucket customization (display names, colors, `.nfo` `IconIndex`) and troubleshooting tools
+   - plus appearance controls (theme preset, density, accent, theme previews)
 8. User can export the report (with optional GUI-side `manual_review` overlay)
 
 ### CLI Flow
@@ -126,8 +134,11 @@ Files:
 ## Release/Packaging Notes
 
 - Windows builds use Nuitka standalone packaging
+- Shared build script supports `dev`/`release` build profiles
 - CI verifies Qt `qwindows.dll` is bundled
 - CI runs a packaged GUI smoke test (`PRODUCER_OS_SMOKE_TEST=1`)
+- CI runs a packaged tiny-analyze smoke test (`PRODUCER_OS_SMOKE_TINY_ANALYZE=1`) against `examples/synthetic_corpus`
+- build/release artifacts include `BUILD_INFO.txt` and `BUILD_TIMING.txt` for provenance/timing analysis
 - release workflow supports optional `signtool`-based code signing placeholders
 
 See:
@@ -135,3 +146,4 @@ See:
 - `docs/RELEASE_PROCESS.md`
 - `docs/TROUBLESHOOTING.md`
 - `docs/CUSTOMIZATION.md`
+- `docs/GUI_RECREATION_SPEC_LOCK.md`

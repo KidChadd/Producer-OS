@@ -10,6 +10,7 @@ Use the documents below for implementation details, troubleshooting, and release
 - `docs/CLASSIFICATION.md` - Hybrid WAV classifier behavior, confidence, reporting, and caching
 - `docs/TROUBLESHOOTING.md` - Common install/runtime issues and fixes
 - `docs/CUSTOMIZATION.md` - Bucket names, colors, and FL Studio `.nfo` icon customization
+- `docs/GUI_RECREATION_SPEC_LOCK.md` - GUI structure baseline/spec-lock validation for template fidelity
 - `docs/RELEASE_PROCESS.md` - CI/versioning/release workflow details
 - `docs/SYSTEM_REQUIREMENTS.md` - Runtime, hardware, and build requirements
 - `docs/CONTRIBUTOR_QUICKSTART.md` - Fast setup and PR workflow for contributors
@@ -27,6 +28,16 @@ GUI:
 CLI:
 
 ![Producer-OS CLI Screenshot](../assets/cli-screenshot.svg)
+
+## GUI Highlights
+
+Recent GUI capabilities now documented across this folder:
+
+- `Run` review split-pane with sticky details panel
+- audio preview + waveform for selected review rows (QtMultimedia, when available)
+- batch review actions + row context menu
+- appearance customization (`theme`, `density`, `accent`) and theme preview cards
+- bucket customization with color picker, icon picker, and reset actions
 
 ## CLI Modes (Detailed Behavior)
 

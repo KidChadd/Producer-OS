@@ -4,7 +4,7 @@
     {
       "label": "Producer-OS: Dry-run (example folders)",
       "type": "process",
-      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "command": "${config:python.defaultInterpreterPath}",
       "args": [
         "-m",
         "producer_os.cli",
@@ -16,7 +16,9 @@
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PYTHONPATH": "${workspaceFolder}\\src"
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
         }
       },
       "problemMatcher": []
@@ -24,12 +26,29 @@
     {
       "label": "Tests: pytest",
       "type": "process",
-      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "command": "${config:python.defaultInterpreterPath}",
       "args": ["-m", "pytest", "-q"],
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
-          "PYTHONPATH": "${workspaceFolder}\\src"
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: GUI spec-lock",
+      "type": "process",
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": ["-m", "pytest", "-q", "tests/test_gui_spec_lock.py"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
         }
       },
       "problemMatcher": []
@@ -37,27 +56,87 @@
     {
       "label": "Lint: ruff",
       "type": "process",
-      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "command": "${config:python.defaultInterpreterPath}",
       "args": ["-m", "ruff", "check", "src", "tests"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Types: mypy",
+      "type": "process",
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": ["-m", "mypy", "src/producer_os"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
       },
       "problemMatcher": []
     },
     {
       "label": "GUI: Run",
       "type": "process",
-      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-      "args": ["run_gui.py"],
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": ["-m", "producer_os", "gui"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "GUI: Smoke",
+      "type": "process",
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": ["-m", "producer_os", "gui"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8",
+          "PRODUCER_OS_SMOKE_TEST": "1",
+          "PRODUCER_OS_SMOKE_TEST_MS": "400"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "GUI Spec-Lock: Check",
+      "type": "process",
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": [
+        "scripts\\gui_spec_lock_audit.py",
+        "--baseline",
+        "tests\\fixtures\\gui_spec_lock_baseline.json",
+        "--check"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
       },
       "problemMatcher": []
     },
     {
       "label": "Profile: Engine Features (500 WAV)",
       "type": "process",
-      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "command": "${config:python.defaultInterpreterPath}",
       "args": [
         "scripts\\profile_engine_extract.py",
         "--root",
@@ -67,7 +146,26 @@
         "--profile"
       ],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "CLI: benchmark-classifier (help)",
+      "type": "process",
+      "command": "${config:python.defaultInterpreterPath}",
+      "args": ["-m", "producer_os.cli", "benchmark-classifier", "--help"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src",
+          "PYTHONUTF8": "1",
+          "PYTHONIOENCODING": "utf-8"
+        }
       },
       "problemMatcher": []
     }
