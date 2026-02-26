@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.3 (2026-02-26)
+
+### Bug Fixes
+
+- **build**: Fail fast when cl.exe is unavailable
+  ([`5ee3196`](https://github.com/KidChadd/Producer-OS/commit/5ee31964c0b496e9025e7ac04b3952a972680305))
+
+
 ## v0.6.2 (2026-02-26)
 
 ### Bug Fixes
