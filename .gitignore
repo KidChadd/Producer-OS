@@ -40,3 +40,7 @@ Thumbs.db
 # Runtime directories
 _hub/
 _inbox/
+
+# Local profiling / sample corpora (machine-specific)
+.tmp_profile_hub*/
+test related samples unorganised/

@@ -3,7 +3,7 @@
   "tasks": [
     {
       "label": "Producer-OS: Dry-run (example folders)",
-      "type": "shell",
+      "type": "process",
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "args": [
         "-m",
@@ -13,20 +13,62 @@
         "${workspaceFolder}\\_hub",
         "--verbose"
       ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src"
+        }
+      },
       "problemMatcher": []
     },
     {
       "label": "Tests: pytest",
-      "type": "shell",
+      "type": "process",
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "args": ["-m", "pytest", "-q"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}\\src"
+        }
+      },
       "problemMatcher": []
     },
     {
       "label": "Lint: ruff",
-      "type": "shell",
+      "type": "process",
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
       "args": ["-m", "ruff", "check", "src", "tests"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "GUI: Run",
+      "type": "process",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["run_gui.py"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Profile: Engine Features (500 WAV)",
+      "type": "process",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": [
+        "scripts\\profile_engine_extract.py",
+        "--root",
+        "${workspaceFolder}\\test related samples unorganised",
+        "--limit",
+        "500",
+        "--profile"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "problemMatcher": []
     }
   ]

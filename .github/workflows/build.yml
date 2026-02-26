@@ -3,12 +3,20 @@ name: Build (Windows EXE)
 on:
   workflow_dispatch:
 
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -16,12 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install deps
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,gui]"
+          python -m pip install -e ".[dev,gui]"
+          python -m pip uninstall -y nuitka
+          python -m pip install --no-cache-dir nuitka==2.8.10
+          python -m nuitka --version
 
       - name: Lint
         run: ruff check src tests
@@ -32,52 +45,11 @@ jobs:
       - name: Build EXE (Nuitka standalone)
         shell: pwsh
         run: |
-          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          if (Test-Path build_gui_entry.build) { Remove-Item -Recurse -Force build_gui_entry.build }
-
-          $nuitkaArgs = @(
-            "--standalone",
-            "--enable-plugin=pyside6",
-            "--windows-console-mode=disable",
-            "--output-dir=dist",
-            "--output-filename=ProducerOS",
-            "--include-package=producer_os",
-            "--include-package=librosa",
-            "--include-package=scipy",
-            "--include-package=numba",
-            "--include-package=llvmlite",
-            "--include-module=soundfile",
-            "--include-package-data=librosa",
-            "--include-package-data=scipy",
-            "--include-package-data=numba",
-            "--include-package-data=llvmlite",
-            "--include-module=sklearn",
-            "--include-module=packaging",
-            "--include-module=joblib",
-            "--include-package=qdarktheme",
-            "--include-package-data=qdarktheme",
-            "--module-parameter=numba-disable-jit=yes"
-          )
-          if (Test-Path "assets\app_icon.ico") {
-            $nuitkaArgs += "--windows-icon-from-ico=assets/app_icon.ico"
-          }
-          $nuitkaArgs += "build_gui_entry.py"
-
-          python -m nuitka @nuitkaArgs
-
-          $qwindows = Get-ChildItem -Path "dist\build_gui_entry.dist" -Recurse -Filter "qwindows.dll" -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-          if ($null -eq $qwindows) {
-            throw "Qt platform plugin qwindows.dll not found in standalone build output."
-          }
-          Write-Host "Found qwindows.dll at $($qwindows.FullName)"
-
-          # Zip the whole dist folder that contains the exe + DLLs
-          if (Test-Path ProducerOS-windows.zip) { Remove-Item ProducerOS-windows.zip -Force }
-          Compress-Archive -Path "dist\build_gui_entry.dist\*" -DestinationPath "ProducerOS-windows.zip"
+          & ".github\scripts\build_windows_nuitka.ps1" -ZipOutput "ProducerOS-windows.zip"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ProducerOS-windows
           path: ProducerOS-windows.zip
+          if-no-files-found: error

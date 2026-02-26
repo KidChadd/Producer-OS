@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: ["main"]
 
+concurrency:
+  group: python-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -18,11 +26,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install package + dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e ".[dev]"
 
       - name: Ruff (lint)
         run: |
@@ -39,4 +49,4 @@ jobs:
       - name: Build (sdist + wheel)
         run: |
           python -m pip install --upgrade build
-          python -m build
+          python -m build --sdist --wheel

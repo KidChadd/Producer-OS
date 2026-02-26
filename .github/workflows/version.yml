@@ -12,10 +12,14 @@ permissions:
   actions: write
   contents: write
 
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
 jobs:
   version:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout full history
@@ -27,11 +31,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install semantic-release
         run: |
           python -m pip install --upgrade pip
-          pip install python-semantic-release
+          python -m pip install python-semantic-release
 
       - name: Detect existing version tag on HEAD
         id: head_tag
