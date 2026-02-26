@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.2.0 (2026-02-26)
+
+### Features
+
+- **engine**: Add hybrid wav classifier with reasoning and tests
+  ([`5dc2259`](https://github.com/KidChadd/Producer-OS/commit/5dc2259f97f80df3521afdda71a05de18a9e839a))
+
+### Performance Improvements
+
+- **engine**: Speed up audio feature extraction hot path
+  ([`b892fc0`](https://github.com/KidChadd/Producer-OS/commit/b892fc06888e45597c11bedf92dba90f6853424f))
+
+
 ## v0.1.3 (2026-02-26)
 
 ### Bug Fixes
