@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.1 (2026-02-26)
+
+### Bug Fixes
+
+- **ci**: Make tiny analyze smoke pass without sklearn
+  ([`2f8b903`](https://github.com/KidChadd/Producer-OS/commit/2f8b9036249cdbc31d2e8bd89a24ce96e90c8956))
+
+
 ## v0.6.0 (2026-02-26)
 
 ### Features
