@@ -30,6 +30,7 @@ import json
 import os
 import shutil
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, TypeAlias
@@ -182,6 +183,9 @@ class ProducerOSEngine:
     # Internal state
     _feature_cache: Dict[str, Any] = field(init=False, default_factory=dict)
     _tuning_loaded: bool = field(init=False, default=False)
+    _audio_backend: Optional[Dict[str, Any]] = field(init=False, default=None)
+    _audio_backend_checked: bool = field(init=False, default=False)
+    _fft_low_mask_cache: Dict[Tuple[int, int, float], Tuple[Any, Any]] = field(init=False, default_factory=dict)
     current_mode: str = field(init=False, default="analyze")
 
     def __post_init__(self) -> None:
@@ -241,6 +245,47 @@ class ProducerOSEngine:
             cache_path.write_text(json.dumps(self._feature_cache), encoding="utf-8")
         except Exception:
             pass
+
+    def _get_audio_backend(self) -> Optional[Dict[str, Any]]:
+        """Import and cache optional audio backend modules/functions once per engine."""
+        if self._audio_backend_checked:
+            return self._audio_backend
+
+        self._audio_backend_checked = True
+        try:
+            import numpy as np  # type: ignore
+            import librosa  # type: ignore
+            import soundfile as sf  # type: ignore
+        except Exception:
+            self._audio_backend = None
+            return None
+
+        feature_mod = librosa.feature
+        self._audio_backend = {
+            "np": np,
+            "sf": sf,
+            "stft": librosa.stft,
+            "yin": librosa.yin,
+            "fft_frequencies": librosa.fft_frequencies,
+            "rms": feature_mod.rms,
+            "zero_crossing_rate": feature_mod.zero_crossing_rate,
+        }
+        return self._audio_backend
+
+    def _get_fft_low_mask(self, sr: int, win: int, cutoff_hz: float = 120.0) -> Tuple[Any, Any]:
+        """Return cached FFT frequency bins and low-frequency mask."""
+        key = (int(sr), int(win), float(cutoff_hz))
+        cached = self._fft_low_mask_cache.get(key)
+        if cached is not None:
+            return cached
+
+        backend = self._get_audio_backend()
+        if backend is None:
+            raise RuntimeError("Audio backend unavailable")
+        freqs = backend["fft_frequencies"](sr=sr, n_fft=win)
+        low_mask = freqs < float(cutoff_hz)
+        self._fft_low_mask_cache[key] = (freqs, low_mask)
+        return freqs, low_mask
 
     # ------------------------------------------------------------------
     # Discovery / ignore logic
@@ -338,29 +383,40 @@ class ProducerOSEngine:
             "glide_drop": 0.0,
         }
 
-        # Lazy imports so engine can run without audio deps installed
-        try:
-            import numpy as np  # type: ignore
-            import librosa  # type: ignore
-            import soundfile as sf  # type: ignore
-        except Exception:
+        backend = self._get_audio_backend()
+        if backend is None:
             self._feature_cache[key] = features
             return features
+        np = backend["np"]
+        sf = backend["sf"]
+        stft = backend["stft"]
+        yin_fn = backend["yin"]
+        rms_fn = backend["rms"]
+        zcr_fn = backend["zero_crossing_rate"]
 
         try:
-            data, sr = sf.read(str(file_path), always_2d=False)
+            data, sr = sf.read(str(file_path), always_2d=True, dtype="float32")
             if isinstance(data, (list, tuple)):
-                data = np.array(data)
-            if getattr(data, "ndim", 1) == 2:
-                data = np.mean(data, axis=1)
-            y = data.astype(float)
+                data = np.array(data, dtype=np.float32)
+            arr = np.asarray(data, dtype=np.float32)
+            if getattr(arr, "ndim", 1) == 2:
+                if arr.shape[1] >= 2:
+                    y = 0.5 * (arr[:, 0] + arr[:, 1])
+                elif arr.shape[1] == 1:
+                    y = arr[:, 0]
+                else:
+                    y = np.empty((0,), dtype=np.float32)
+            else:
+                y = arr
+            y = np.ascontiguousarray(y, dtype=np.float32)
 
-            max_val = float(np.max(np.abs(y))) if float(np.max(np.abs(y))) > 0 else 1.0
-            y_norm = y / max_val
+            eps = 1e-9
+            max_val = float(np.max(np.abs(y))) if y.size > 0 else 0.0
+            y_norm = y / (max_val + eps)
             # Number of samples in the normalized signal
             n = len(y_norm)
             # Duration in seconds
-            duration = float(n) / float(sr)
+            duration = (float(n) / float(sr)) if sr else 0.0
             features["duration"] = duration
 
             # ------------------------------------------------------------------
@@ -378,16 +434,21 @@ class ProducerOSEngine:
             # Keep hop length proportional and valid
             hop = min(512, max(1, win // 4))
 
-            S = np.abs(librosa.stft(y_norm, n_fft=win, hop_length=hop, window="hann"))
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"n_fft=.*too large for input signal of length=.*",
+                    category=UserWarning,
+                )
+                S = np.abs(stft(y_norm, n_fft=win, hop_length=hop, window="hann"))
             P = S**2
-            freqs = librosa.fft_frequencies(sr=sr, n_fft=win)
+            freqs, low_mask = self._get_fft_low_mask(int(sr), win, 120.0)
 
             total_power = float(np.sum(P))
-            low_mask = freqs < 120.0
             low_power = float(np.sum(P[low_mask, :])) if P.size > 0 else 0.0
-            features["low_freq_ratio"] = float(low_power) / float(total_power + 1e-9)
+            features["low_freq_ratio"] = float(low_power) / float(total_power + eps)
 
-            rms = librosa.feature.rms(S=S, hop_length=hop)[0]
+            rms = rms_fn(S=S, hop_length=hop)[0]
             early_frames = int((0.08 * sr) / hop + 0.999)
             mid_frames = int((0.20 * sr) / hop + 0.999)
             if len(rms) > 0:
@@ -395,9 +456,13 @@ class ProducerOSEngine:
                 start_mid = min(len(rms), early_frames)
                 end_mid = min(len(rms), start_mid + max(1, mid_frames))
                 median_mid = float(np.median(rms[start_mid:end_mid])) if end_mid > start_mid else float(np.median(rms))
-                features["transient_strength"] = peak_early / (median_mid + 1e-9)
+                features["transient_strength"] = peak_early / (median_mid + eps)
 
-            centroid = librosa.feature.spectral_centroid(S=S, sr=sr, hop_length=hop)[0]
+            if S.size > 0:
+                mag_sum = np.sum(S, axis=0)
+                centroid = np.dot(freqs, S) / (mag_sum + eps)
+            else:
+                centroid = np.array([], dtype=np.float32)
             features["centroid_mean"] = float(np.mean(centroid)) if centroid.size > 0 else 0.0
             early_centroid_frames = int((0.10 * sr) / hop + 0.999)
             features["centroid_early"] = (
@@ -406,19 +471,32 @@ class ProducerOSEngine:
                 else features["centroid_mean"]
             )
 
-            zcr = librosa.feature.zero_crossing_rate(y_norm, frame_length=win, hop_length=hop)[0]
+            zcr = zcr_fn(y_norm, frame_length=win, hop_length=hop)[0]
             features["zcr_mean"] = float(np.mean(zcr)) if zcr.size > 0 else 0.0
 
-            flatness = librosa.feature.spectral_flatness(S=S)[0]
+            if P.size > 0:
+                P_safe = np.maximum(P, 1e-10)
+                geom_mean = np.exp(np.mean(np.log(P_safe), axis=0))
+                arith_mean = np.mean(P_safe, axis=0)
+                flatness = geom_mean / (arith_mean + eps)
+            else:
+                flatness = np.array([], dtype=np.float32)
             features["flatness_mean"] = float(np.mean(flatness)) if flatness.size > 0 else 0.0
 
             # Pitch (yin)
             try:
                 # librosa.yin needs enough samples for low fmin (avoid inaccurate pitch detection warning)
-                win = max(int(win), 2207)
-
-                f0 = librosa.yin(y_norm, fmin=20, fmax=2000, sr=sr, frame_length=win, hop_length=hop)
-                valid = ~np.isnan(f0)
+                yin_frame_length = max(int(win), 2207)
+                if n < yin_frame_length:
+                    raise ValueError("Signal too short for YIN frame length")
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message=r"With fmin=.*less than two periods of fmin fit into the frame.*",
+                        category=UserWarning,
+                    )
+                    f0 = yin_fn(y_norm, fmin=20, fmax=2000, sr=sr, frame_length=yin_frame_length, hop_length=hop)
+                valid = np.isfinite(f0) & (f0 > 0)
                 voiced_ratio = float(np.sum(valid)) / float(len(f0)) if len(f0) > 0 else 0.0
                 features["voiced_ratio"] = voiced_ratio
                 if bool(np.any(valid)):
@@ -426,7 +504,7 @@ class ProducerOSEngine:
                     features["median_f0"] = float(np.median(vf0))
                     s = 12.0 * np.log2(vf0 / 55.0)
                     features["pitch_std"] = float(np.std(s)) if s.size > 0 else 0.0
-                glide_info = self._detect_glide(f0, sr, win, hop)
+                glide_info = self._detect_glide(f0, sr, yin_frame_length, hop)
                 features.update(glide_info)
             except Exception:
                 pass
