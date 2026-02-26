@@ -260,6 +260,10 @@ try {
         Wait-Process -Id $analyzeProc.Id -Timeout $TinyAnalyzeSmokeTimeoutSeconds
         $analyzeProc.Refresh()
         if ($analyzeProc.ExitCode -ne 0) {
+            if (Test-Path $smokeOut) {
+                Write-Host "Tiny-analyze smoke output (failure):"
+                Get-Content -Path $smokeOut | ForEach-Object { Write-Host $_ }
+            }
             throw "Tiny-analyze smoke failed with exit code $($analyzeProc.ExitCode)"
         }
         if (!(Test-Path $smokeOut)) {
@@ -275,6 +279,10 @@ try {
         Write-Host "Tiny-analyze smoke passed. files_processed=$($smokeJson.files_processed) packs=$($smokeJson.packs)"
     }
     catch {
+        if (Test-Path $smokeOut) {
+            Write-Host "Tiny-analyze smoke output (catch):"
+            Get-Content -Path $smokeOut | ForEach-Object { Write-Host $_ }
+        }
         try {
             if (-not $analyzeProc.HasExited) {
                 Stop-Process -Id $analyzeProc.Id -Force -ErrorAction SilentlyContinue

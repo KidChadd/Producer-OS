@@ -375,23 +375,28 @@ class ProducerOSEngine:
 
         self._audio_backend_checked = True
         try:
-            import librosa  # type: ignore
             import numpy as np  # type: ignore
             import soundfile as sf  # type: ignore
+            # Import only the librosa submodules/functions used by Producer OS.
+            # This avoids pulling optional sklearn-backed librosa modules into
+            # the runtime path (important for packaged standalone builds).
+            from librosa.core.convert import fft_frequencies  # type: ignore
+            from librosa.core.pitch import yin  # type: ignore
+            from librosa.core.spectrum import stft  # type: ignore
+            from librosa.feature import rms, zero_crossing_rate  # type: ignore
         except Exception:
             self._audio_backend = None
             return None
 
-        # Cache concrete function refs to avoid repeated lazy-loader lookups in hot paths.
-        feature_mod = librosa.feature
+        # Cache concrete function refs to avoid repeated imports/lookups in hot paths.
         self._audio_backend = {
             "np": np,
             "sf": sf,
-            "stft": librosa.stft,
-            "fft_frequencies": librosa.fft_frequencies,
-            "yin": librosa.yin,
-            "rms": feature_mod.rms,
-            "zero_crossing_rate": feature_mod.zero_crossing_rate,
+            "stft": stft,
+            "fft_frequencies": fft_frequencies,
+            "yin": yin,
+            "rms": rms,
+            "zero_crossing_rate": zero_crossing_rate,
         }
         return self._audio_backend
 
