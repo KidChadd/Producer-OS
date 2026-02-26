@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from typing import Any
 
 from PySide6.QtCore import (
@@ -10,6 +11,12 @@ from PySide6.QtCore import (
     QSequentialAnimationGroup,
 )
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
+
+
+def _supports_opacity_effects() -> bool:
+    # Qt/PySide on Windows can spam QPainter warnings with QGraphicsOpacityEffect
+    # on frequently-updated widgets (e.g. pulsing status labels).
+    return platform.system().lower() != "windows"
 
 
 def _anim_store(owner: Any) -> list[Any]:
@@ -45,6 +52,8 @@ def _opacity_effect(widget: QWidget) -> QGraphicsOpacityEffect:
 
 
 def fade_in(widget: QWidget, duration_ms: int = 220, start: float = 0.0, end: float = 1.0) -> None:
+    if not _supports_opacity_effects():
+        return
     effect = _opacity_effect(widget)
     effect.setOpacity(start)
     anim = QPropertyAnimation(effect, b"opacity", widget)
@@ -60,8 +69,6 @@ def slide_fade_in(widget: QWidget, dx: int = 18, duration_ms: int = 240) -> None
     end_pos = widget.pos()
     start_pos = QPoint(end_pos.x() + dx, end_pos.y())
     widget.move(start_pos)
-    effect = _opacity_effect(widget)
-    effect.setOpacity(0.0)
 
     pos_anim = QPropertyAnimation(widget, b"pos", widget)
     pos_anim.setDuration(duration_ms)
@@ -69,21 +76,25 @@ def slide_fade_in(widget: QWidget, dx: int = 18, duration_ms: int = 240) -> None
     pos_anim.setEndValue(end_pos)
     pos_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-    opacity_anim = QPropertyAnimation(effect, b"opacity", widget)
-    opacity_anim.setDuration(duration_ms)
-    opacity_anim.setStartValue(0.0)
-    opacity_anim.setEndValue(1.0)
-    opacity_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
     group = QParallelAnimationGroup(widget)
     group.addAnimation(pos_anim)
-    group.addAnimation(opacity_anim)
+    if _supports_opacity_effects():
+        effect = _opacity_effect(widget)
+        effect.setOpacity(0.0)
+        opacity_anim = QPropertyAnimation(effect, b"opacity", widget)
+        opacity_anim.setDuration(duration_ms)
+        opacity_anim.setStartValue(0.0)
+        opacity_anim.setEndValue(1.0)
+        opacity_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        group.addAnimation(opacity_anim)
     _keep_animation(widget, group)
     group.start()
 
 
 def pulse_opacity(widget: QWidget, low: float = 0.55, high: float = 1.0, duration_ms: int = 950) -> None:
     stop_pulse(widget)
+    if not _supports_opacity_effects():
+        return
     effect = _opacity_effect(widget)
     effect.setOpacity(high)
 
@@ -117,7 +128,10 @@ def stop_pulse(widget: QWidget) -> None:
             setattr(widget, "_pulse_animation", None)
     effect = widget.graphicsEffect()
     if isinstance(effect, QGraphicsOpacityEffect):
-        effect.setOpacity(1.0)
+        if _supports_opacity_effects():
+            effect.setOpacity(1.0)
+        else:
+            widget.setGraphicsEffect(None)
 
 
 def animate_reveal(widget: QWidget, expanded: bool, duration_ms: int = 220) -> None:
@@ -133,28 +147,30 @@ def animate_reveal(widget: QWidget, expanded: bool, duration_ms: int = 220) -> N
     height_anim.setEndValue(end_height)
     height_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-    effect = _opacity_effect(widget)
-    effect.setOpacity(0.0 if (expanded and start_height == 0) else effect.opacity())
-    opacity_anim = QPropertyAnimation(effect, b"opacity", widget)
-    opacity_anim.setDuration(duration_ms)
-    opacity_anim.setStartValue(effect.opacity())
-    opacity_anim.setEndValue(1.0 if expanded else 0.0)
-    opacity_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-
     group = QParallelAnimationGroup(widget)
     group.addAnimation(height_anim)
-    group.addAnimation(opacity_anim)
+    effect: QGraphicsOpacityEffect | None = None
+    if _supports_opacity_effects():
+        effect = _opacity_effect(widget)
+        effect.setOpacity(0.0 if (expanded and start_height == 0) else effect.opacity())
+        opacity_anim = QPropertyAnimation(effect, b"opacity", widget)
+        opacity_anim.setDuration(duration_ms)
+        opacity_anim.setStartValue(effect.opacity())
+        opacity_anim.setEndValue(1.0 if expanded else 0.0)
+        opacity_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        group.addAnimation(opacity_anim)
 
     def _finish() -> None:
         if expanded:
             widget.setMaximumHeight(16777215)
-            effect.setOpacity(1.0)
+            if effect is not None:
+                effect.setOpacity(1.0)
         else:
             widget.setVisible(False)
             widget.setMaximumHeight(0)
-            effect.setOpacity(1.0)
+            if effect is not None:
+                effect.setOpacity(1.0)
 
     group.finished.connect(_finish)
     _keep_animation(widget, group)
     group.start()
-

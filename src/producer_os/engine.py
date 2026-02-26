@@ -37,7 +37,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, TypeAlias
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypedDict, TypeAlias
 
 from .bucket_service import BucketService
 from .styles_service import StyleService
@@ -169,15 +169,45 @@ class ProducerOSEngine:
     )
     _feature_cache_stats: Dict[str, Any] = field(init=False, default_factory=dict)
     _feature_cache_lock: Any = field(init=False, default_factory=threading.Lock, repr=False)
+    _organized_root_name: Optional[str] = field(init=False, default=None)
+    _organized_root_dir: Path = field(init=False)
     current_mode: str = field(init=False, default="analyze")
 
     def __post_init__(self) -> None:
         self.inbox_dir = Path(self.inbox_dir)
         self.hub_dir = Path(self.hub_dir)
+        self._organized_root_name = self._resolve_organized_root_name()
+        self._organized_root_dir = self.hub_dir / self._organized_root_name if self._organized_root_name else self.hub_dir
         self._reset_feature_cache_stats()
         self._load_tuning_overrides()
         self._load_user_bucket_hints()
         self._load_feature_cache()
+
+    def _resolve_organized_root_name(self) -> Optional[str]:
+        """Return optional subfolder name for sorted output (logs remain at hub root)."""
+        cfg = self.config if isinstance(self.config, dict) else {}
+        raw = cfg.get("output_folder_name")
+        if raw is None:
+            raw = cfg.get("hub_folder_name")
+        text = str(raw or "").strip()
+        if not text:
+            return None
+        if text in {".", ".."}:
+            return None
+        if "/" in text or "\\" in text:
+            return None
+        if text.lower() == "logs":
+            # Reserved sibling folder for run reports/logs.
+            return None
+        return text
+
+    def _content_root_dir(self) -> Path:
+        """Root folder for sorted categories and style sidecars."""
+        return self._organized_root_dir
+
+    def _logs_root_dir(self) -> Path:
+        """Root folder for run logs/reports (always sibling of organized content)."""
+        return self.hub_dir / "logs"
 
     # ------------------------------------------------------------------
     # Tuning overrides and feature caching
@@ -1345,7 +1375,8 @@ class ProducerOSEngine:
     # Hub structure + styling (sidecar nfo placement)
     def _ensure_hub_structure(self, category: str, bucket: str, pack_name: str) -> Tuple[Path, Path, Path]:
         """Return (category_dir, bucket_dir, pack_dir). Create/write styles in modifying modes only."""
-        category_dir = self.hub_dir / category
+        content_root = self._content_root_dir()
+        category_dir = content_root / category
         display_bucket = self.bucket_service.get_display_name(bucket)
         bucket_dir = category_dir / display_bucket
         pack_dir = bucket_dir / pack_name
@@ -1357,7 +1388,7 @@ class ProducerOSEngine:
 
         # Category .nfo lives in hub root (next to category folder)
         category_style = self.style_service.resolve_style(category, category)
-        self.style_service.write_nfo(self.hub_dir, category, category_style)
+        self.style_service.write_nfo(content_root, category, category_style)
 
         # Bucket .nfo lives in category folder (next to bucket folder)
         bucket_style = self.style_service.resolve_style(bucket, category)
@@ -1370,16 +1401,17 @@ class ProducerOSEngine:
         return category_dir, bucket_dir, pack_dir
 
     def _ensure_unsorted_structure(self, pack_name: str) -> Path:
-        unsorted_dir = self.hub_dir / "UNSORTED" / pack_name
+        content_root = self._content_root_dir()
+        unsorted_dir = content_root / "UNSORTED" / pack_name
 
         if self.current_mode not in {"copy", "move", "repair-styles"}:
             return unsorted_dir
 
         unsorted_dir.mkdir(parents=True, exist_ok=True)
         # UNSORTED category .nfo (hub root)
-        self.style_service.write_nfo(self.hub_dir, "UNSORTED", DEFAULT_UNSORTED_STYLE)
+        self.style_service.write_nfo(content_root, "UNSORTED", DEFAULT_UNSORTED_STYLE)
         # Pack .nfo inside UNSORTED
-        self.style_service.write_nfo(self.hub_dir / "UNSORTED", pack_name, DEFAULT_UNSORTED_STYLE)
+        self.style_service.write_nfo(content_root / "UNSORTED", pack_name, DEFAULT_UNSORTED_STYLE)
         return unsorted_dir
 
     # ------------------------------------------------------------------
@@ -1397,6 +1429,8 @@ class ProducerOSEngine:
         overwrite_nfo: bool = False,  # reserved for future; kept for UI compatibility
         normalize_pack_name: bool = False,  # reserved for future
         developer_options: Optional[Dict[str, Any]] = None,
+        log_callback: Optional[Callable[[str], None]] = None,
+        log_to_console: bool = True,
     ) -> Dict[str, Any]:
         """Execute a run.
 
@@ -1426,12 +1460,25 @@ class ProducerOSEngine:
         write_hub = mode in {"copy", "move", "repair-styles"}  # .nfo + cache allowed
         write_logs = mode in {"dry-run", "copy", "move", "repair-styles"}  # analyze must not log
         do_transfer = mode in {"copy", "move"}
+        content_root = self._content_root_dir()
+        logs_root = self._logs_root_dir()
+
+        def _emit_log(msg: str) -> None:
+            if log_to_console:
+                print(msg)
+            if log_callback is not None:
+                try:
+                    log_callback(msg)
+                except Exception:
+                    pass
 
         run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
         report: Dict[str, Any] = {
             "run_id": run_id,
             "mode": mode,
             "timestamp": datetime.datetime.now().isoformat(),
+            "hub": str(self.hub_dir.resolve()),
+            "organized_output_root": str(content_root.resolve()),
             "files_processed": 0,
             "files_moved": 0,
             "files_copied": 0,
@@ -1447,7 +1494,13 @@ class ProducerOSEngine:
         # ANALYZE: absolutely no filesystem writes
         if mode == "analyze":
             packs = self._discover_packs()
+            _emit_log(f"Producer OS run_id={run_id} mode={mode}")
+            _emit_log(f"Destination root: {self.hub_dir}")
+            if content_root != self.hub_dir:
+                _emit_log(f"Organized output root: {content_root}")
+            _emit_log(f"Packs discovered: {len(packs)}")
             for pack_dir in packs:
+                _emit_log(f"Processing pack: {pack_dir.name}")
                 pack_report: PackReport = {
                     "pack": pack_dir.name,
                     "files": [],
@@ -1459,12 +1512,12 @@ class ProducerOSEngine:
                     wav_items, results
                 ):
                     if bucket is None:
-                        dest_path = self.hub_dir / "UNSORTED" / pack_dir.name / rel_path
+                        dest_path = content_root / "UNSORTED" / pack_dir.name / rel_path
                         report["unsorted"] += 1
                         reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
                     else:
                         display_bucket = self.bucket_service.get_display_name(bucket)
-                        dest_path = self.hub_dir / category / display_bucket / pack_dir.name / rel_path
+                        dest_path = content_root / category / display_bucket / pack_dir.name / rel_path
                         reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
 
                     pack_report["files"].append(
@@ -1482,7 +1535,13 @@ class ProducerOSEngine:
                     report["files_processed"] += 1
 
                 report["packs"].append(pack_report)
+                _emit_log(f"Finished pack: {pack_dir.name} files={len(pack_report['files'])}")
 
+            _emit_log(
+                f"Done. processed={report['files_processed']} "
+                f"failed={report['failed']} unsorted={report['unsorted']} "
+                f"skipped_non_wav={report['files_skipped_non_wav']}"
+            )
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
             return report
 
@@ -1493,7 +1552,7 @@ class ProducerOSEngine:
         report_path: Optional[Path] = None
 
         if write_logs:
-            log_dir = self.hub_dir / "logs" / run_id
+            log_dir = logs_root / run_id
             log_dir.mkdir(parents=True, exist_ok=True)
             audit_path = log_dir / "audit.csv"
             run_log_path = log_dir / "run_log.txt"
@@ -1521,15 +1580,16 @@ class ProducerOSEngine:
         log_handle = open(run_log_path, "w", encoding="utf-8", buffering=1) if write_logs and run_log_path else None
 
         def _log(msg: str) -> None:
-            # Always show in console
-            print(msg)
+            _emit_log(msg)
             # Also write to run_log.txt if enabled
             if log_handle:
                 log_handle.write(msg + "\n")
                 log_handle.flush()
 
         _log(f"Producer OS run_id={run_id} mode={mode}")
-        _log(f"Hub: {self.hub_dir}")
+        _log(f"Destination root: {self.hub_dir}")
+        if content_root != self.hub_dir:
+            _log(f"Organized output root: {content_root}")
         _log(f"Packs discovered: {len(packs)}")
 
         try:
@@ -1556,7 +1616,7 @@ class ProducerOSEngine:
                         dest_dir = (
                             self._ensure_unsorted_structure(pack_dir.name)
                             if write_hub
-                            else (self.hub_dir / "UNSORTED" / pack_dir.name)
+                            else (content_root / "UNSORTED" / pack_dir.name)
                         )
                         dest_path = dest_dir / rel_path
                         report["unsorted"] += 1
@@ -1566,7 +1626,7 @@ class ProducerOSEngine:
                         if write_hub:
                             _, _, pack_dest_dir = self._ensure_hub_structure(category, bucket, pack_dir.name)
                         else:
-                            pack_dest_dir = self.hub_dir / category / display_bucket / pack_dir.name
+                            pack_dest_dir = content_root / category / display_bucket / pack_dir.name
                         dest_path = pack_dest_dir / rel_path
                         reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
 
@@ -1750,6 +1810,7 @@ class ProducerOSEngine:
             "timestamp": datetime.datetime.now().isoformat(),
             "inbox": str(self.inbox_dir.resolve()),
             "hub": str(self.hub_dir.resolve()),
+            "organized_output_root": str(self._content_root_dir().resolve()),
             "files_classified": int(total),
             "files_skipped_non_wav": int(report.get("files_skipped_non_wav", 0) or 0),
             "errors": int(report.get("failed", 0) or 0),
@@ -1811,7 +1872,7 @@ class ProducerOSEngine:
           - reverted_count: int
           - conflicts: list[dict]
         """
-        logs_root = self.hub_dir / "logs"
+        logs_root = self._logs_root_dir()
         if not logs_root.exists():
             return {"reverted_count": 0, "conflicts": [], "error": "No logs found"}
 
@@ -1824,6 +1885,7 @@ class ProducerOSEngine:
         restored = 0
         conflicts: List[Dict[str, str]] = []
 
+        content_root = self._content_root_dir()
         quarantine_dir = self.hub_dir / "Quarantine" / "UndoConflicts"
         quarantine_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1842,9 +1904,9 @@ class ProducerOSEngine:
                     # where it is now (hub)
                     if bucket != "UNSORTED":
                         display_bucket = self.bucket_service.get_display_name(bucket)
-                        current_location = self.hub_dir / category / display_bucket / pack / src_path.name
+                        current_location = content_root / category / display_bucket / pack / src_path.name
                     else:
-                        current_location = self.hub_dir / "UNSORTED" / pack / src_path.name
+                        current_location = content_root / "UNSORTED" / pack / src_path.name
 
                     if not current_location.exists():
                         continue
@@ -1874,20 +1936,22 @@ class ProducerOSEngine:
         - Must ignore hub internal folders like logs
         """
         actions = {"created": 0, "updated": 0, "removed": 0}
+        content_root = self._content_root_dir()
+
+        if not content_root.exists():
+            return actions
 
         # Build desired nfo set for categories/buckets/packs
         desired_nfos: set[Path] = set()
 
-        for category_dir in self.hub_dir.iterdir():
+        for category_dir in content_root.iterdir():
             if not category_dir.is_dir():
                 continue
             if self._should_ignore(category_dir.name):
                 continue
-            if category_dir.name.lower() == "logs":
-                continue
 
             category = category_dir.name
-            desired_nfos.add(self.hub_dir / f"{category}.nfo")
+            desired_nfos.add(content_root / f"{category}.nfo")
 
             for bucket_dir in category_dir.iterdir():
                 if not bucket_dir.is_dir() or self._should_ignore(bucket_dir.name):
@@ -1905,7 +1969,7 @@ class ProducerOSEngine:
             folder_name = nfo_path.stem
             parent_dir = nfo_path.parent
 
-            if parent_dir == self.hub_dir:
+            if parent_dir == content_root:
                 category = folder_name
                 if category.upper() == "UNSORTED":
                     style = DEFAULT_UNSORTED_STYLE
@@ -1913,7 +1977,7 @@ class ProducerOSEngine:
                     style = self.style_service.resolve_style(category, category)
             else:
                 grandparent = parent_dir.parent
-                if grandparent == self.hub_dir:
+                if grandparent == content_root:
                     category = parent_dir.name
                     display_bucket = folder_name
                     bucket_id = self.bucket_service.get_bucket_id(display_bucket) or display_bucket
@@ -1941,13 +2005,9 @@ class ProducerOSEngine:
                 actions["created"] += 1
 
         # Remove orphan nfos (no matching folder next to them)
-        for nfo in self.hub_dir.rglob("*.nfo"):
-            # ignore anything under logs
-            if "logs" in [p.lower() for p in nfo.parts]:
-                continue
-
-            if nfo.parent == self.hub_dir:
-                expected_folder = self.hub_dir / nfo.stem
+        for nfo in content_root.rglob("*.nfo"):
+            if nfo.parent == content_root:
+                expected_folder = content_root / nfo.stem
             else:
                 expected_folder = nfo.parent / nfo.stem
 

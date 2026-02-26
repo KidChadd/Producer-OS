@@ -12,18 +12,22 @@ from producer_os.ui.widgets import SegmentedControl, set_widget_role
 class HubPage(BaseWizardPage):
     browseRequested = Signal()
     hubPathChanged = Signal(str)
+    outputFolderNameChanged = Signal(str)
     actionChanged = Signal(str)
 
-    def __init__(self, hub_path: str, action: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, hub_path: str, output_folder_name: str, action: str, parent: Optional[QWidget] = None) -> None:
         super().__init__(
-            "Step 2 - Hub Destination",
-            "Choose the destination hub and whether files should be copied or moved.",
+            "Step 2 - Destination",
+            "Choose the destination root, organized folder name, and whether files should be copied or moved.",
             parent,
         )
 
-        path_card = self.add_card("Hub Folder", "The destination hub receives sorted files and run logs.")
+        path_card = self.add_card(
+            "Destination Folder",
+            "Logs are written here. Sorted folders are written into the organized folder name below.",
+        )
         self.hub_edit = QLineEdit(hub_path)
-        self.hub_edit.setPlaceholderText(r"C:\Path\To\Hub")
+        self.hub_edit.setPlaceholderText(r"C:\Path\To\Destination")
         self.hub_edit.textChanged.connect(self.hubPathChanged.emit)
 
         browse_btn = QPushButton("Browse...")
@@ -36,6 +40,15 @@ class HubPage(BaseWizardPage):
         row.addWidget(self.hub_edit, 1)
         row.addWidget(browse_btn)
         path_card.body_layout.addLayout(row)
+
+        name_card = self.add_card(
+            "Organized Folder Name",
+            "Creates a folder beside logs (for example: Hub, Outbox, Destination).",
+        )
+        self.output_folder_name_edit = QLineEdit(output_folder_name or "Hub")
+        self.output_folder_name_edit.setPlaceholderText("Hub")
+        self.output_folder_name_edit.textChanged.connect(self.outputFolderNameChanged.emit)
+        name_card.body_layout.addWidget(self.output_folder_name_edit)
 
         action_card = self.add_card("Transfer Mode", "Copy is non-destructive. Move is logged and can be undone.")
         self.action_control = SegmentedControl(values=["move", "copy"], current=action)
@@ -51,6 +64,10 @@ class HubPage(BaseWizardPage):
     def set_hub_path(self, path: str) -> None:
         with QSignalBlocker(self.hub_edit):
             self.hub_edit.setText(path)
+
+    def set_output_folder_name(self, name: str) -> None:
+        with QSignalBlocker(self.output_folder_name_edit):
+            self.output_folder_name_edit.setText(name)
 
     def set_action(self, action: str) -> None:
         self.action_control.set_value(action, emit=False)

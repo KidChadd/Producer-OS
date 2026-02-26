@@ -176,7 +176,7 @@ class ProducerOSWindow(QMainWindow):
 
     def _create_pages(self) -> None:
         self.inbox_page = InboxPage(self.state.inbox_path, self.state.dry_run)
-        self.hub_page = HubPage(self.state.hub_path, self.state.action)
+        self.hub_page = HubPage(self.state.hub_path, self.state.output_folder_name, self.state.action)
         self.options_page = OptionsPage(
             file_types=self.state.file_types,
             preserve_vendor=self.state.preserve_vendor,
@@ -205,6 +205,7 @@ class ProducerOSWindow(QMainWindow):
 
         self.hub_page.browseRequested.connect(self.browse_hub)
         self.hub_page.hubPathChanged.connect(self.on_hub_path_changed)
+        self.hub_page.outputFolderNameChanged.connect(self.on_output_folder_name_changed)
         self.hub_page.actionChanged.connect(self.on_action_changed)
 
         self.options_page.fileTypeChanged.connect(self.on_file_type_changed)
@@ -359,7 +360,7 @@ class ProducerOSWindow(QMainWindow):
     # Hub page
     def browse_hub(self) -> None:
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Hub Folder", self.state.hub_path or str(Path.home())
+            self, "Select Destination Folder", self.state.hub_path or str(Path.home())
         )
         if directory:
             self.hub_page.set_hub_path(directory)
@@ -370,6 +371,11 @@ class ProducerOSWindow(QMainWindow):
         self.save_setting("hub_path", path_str)
         self.update_hub_warning()
         self._refresh_troubleshooting_status()
+
+    def on_output_folder_name_changed(self, name: str) -> None:
+        self.state.output_folder_name = str(name)
+        self.save_setting("output_folder_name", self.state.output_folder_name)
+        self.update_hub_warning()
 
     def on_action_changed(self, action: str) -> None:
         if action not in {"move", "copy"}:
@@ -382,6 +388,9 @@ class ProducerOSWindow(QMainWindow):
     def _compute_hub_warning(self) -> str:
         inbox_str = self.state.inbox_path
         hub_str = self.state.hub_path
+        output_name_warning = self._validate_output_folder_name(self.state.output_folder_name)
+        if output_name_warning:
+            return output_name_warning
         if not inbox_str or not hub_str:
             return ""
         try:
@@ -390,9 +399,21 @@ class ProducerOSWindow(QMainWindow):
         except Exception:
             return ""
         if inbox_path == hub_path:
-            return "Hub folder must be different from inbox."
+            return "Destination folder must be different from the inbox."
         if inbox_path in hub_path.parents:
-            return "Hub folder cannot be inside the inbox."
+            return "Destination folder cannot be inside the inbox."
+        return ""
+
+    def _validate_output_folder_name(self, name: str) -> str:
+        text = (name or "").strip()
+        if not text:
+            return "Organized folder name cannot be blank."
+        if text in {".", ".."}:
+            return "Organized folder name cannot be '.' or '..'."
+        if any(ch in text for ch in ("/", "\\")):
+            return "Organized folder name must be a single folder name (no slashes)."
+        if text.lower() == "logs":
+            return "Organized folder name cannot be 'logs' because logs is reserved."
         return ""
 
     def update_hub_warning(self) -> None:
@@ -444,6 +465,7 @@ class ProducerOSWindow(QMainWindow):
             cfg["bucket_hints"] = self.config_service.load_bucket_hints()
         except Exception:
             pass
+        cfg["output_folder_name"] = str(self.state.output_folder_name or "").strip()
         return cfg
 
     def open_config_folder(self) -> None:
@@ -520,7 +542,22 @@ class ProducerOSWindow(QMainWindow):
             QMessageBox.warning(self, "Qt plugin check", f"Check failed: {exc}")
 
     def _bucket_ids_for_customization(self) -> list[str]:
-        ids: list[str] = list(ProducerOSEngine.BUCKET_RULES.keys())
+        ids: list[str] = []
+        try:
+            field_info = getattr(ProducerOSEngine, "__dataclass_fields__", {}).get("BUCKET_RULES")
+            default_factory = getattr(field_info, "default_factory", None)
+            if callable(default_factory):
+                default_rules = default_factory()
+                if isinstance(default_rules, dict):
+                    ids = [str(bucket_id) for bucket_id in default_rules.keys()]
+        except Exception:
+            ids = []
+
+        # If engine defaults are unavailable for any reason, fall back to any buckets
+        # already observed from a previous run.
+        for bucket_id in self._last_engine_bucket_ids:
+            if bucket_id not in ids:
+                ids.append(str(bucket_id))
         extras = list((self.bucket_service.mapping or {}).keys())
         extras += list((self.styles_data.get("buckets", {}) or {}).keys())
         for bucket_id in extras:
@@ -738,13 +775,21 @@ class ProducerOSWindow(QMainWindow):
             QMessageBox.warning(self, "Run", "Please select a valid inbox folder.")
             return
         if not hub_path or not Path(hub_path).exists():
-            QMessageBox.warning(self, "Run", "Please select a valid hub folder.")
+            QMessageBox.warning(self, "Run", "Please select a valid destination folder.")
+            return
+        output_name_warning = self._validate_output_folder_name(self.state.output_folder_name)
+        if output_name_warning:
+            QMessageBox.warning(self, "Run", output_name_warning)
             return
         try:
             inbox_resolved = Path(inbox_path).resolve()
             hub_resolved = Path(hub_path).resolve()
             if inbox_resolved == hub_resolved or hub_resolved.is_relative_to(inbox_resolved):
-                QMessageBox.warning(self, "Run", "Hub folder must be different from and not inside the inbox.")
+                QMessageBox.warning(
+                    self,
+                    "Run",
+                    "Destination folder must be different from and not inside the inbox.",
+                )
                 return
         except Exception:
             pass
@@ -764,8 +809,15 @@ class ProducerOSWindow(QMainWindow):
         )
         self._last_engine_bucket_ids = list(engine.BUCKET_RULES.keys())
         self.engine_runner = EngineRunner(engine, mode)
+        self.engine_runner.logLine.connect(self.on_engine_log_line)
         self.engine_runner.finished.connect(self.on_engine_finished)
         self.engine_runner.start()
+
+    def on_engine_log_line(self, line: str) -> None:
+        try:
+            self.run_page.append_log_line(line)
+        except Exception:
+            pass
 
     def on_engine_finished(self, report: dict, report_path: str) -> None:
         self.current_report = report

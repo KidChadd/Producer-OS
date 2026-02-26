@@ -30,7 +30,7 @@
       "description": "Override to enable portable mode"
     },
     "developer_tools": {
-      "type": "object",
+      "type": ["boolean", "object"],
       "description": "Developer options such as verbose logging",
       "additionalProperties": true
     }

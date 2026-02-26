@@ -14,6 +14,7 @@ DEFAULT_FILE_TYPES: dict[str, bool] = {
 class WizardState:
     inbox_path: str = ""
     hub_path: str = ""
+    output_folder_name: str = "Hub"
     action: str = "move"
     dry_run: bool = False
     preserve_vendor: bool = True
@@ -34,6 +35,7 @@ class WizardState:
         return cls(
             inbox_path=str(config.get("inbox_path", "")),
             hub_path=str(config.get("hub_path", "")),
+            output_folder_name=str(config.get("output_folder_name", "Hub") or "Hub"),
             action=str(config.get("action", "move")),
             dry_run=bool(config.get("dry_run", False)),
             preserve_vendor=bool(config.get("preserve_vendor", True)),
@@ -47,6 +49,7 @@ class WizardState:
         return {
             "inbox_path": self.inbox_path,
             "hub_path": self.hub_path,
+            "output_folder_name": self.output_folder_name,
             "action": self.action,
             "dry_run": self.dry_run,
             "preserve_vendor": self.preserve_vendor,

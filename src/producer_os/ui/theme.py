@@ -378,8 +378,22 @@ def apply_app_theme(app: QApplication, theme: ThemeName) -> None:
     base_sheet = ""
     if theme in {"dark", "light"} and qdarktheme is not None:
         qdt = cast(Any, qdarktheme)
-        qdt.setup_theme(theme)
-        base_sheet = app.styleSheet()
+        try:
+            if hasattr(qdt, "setup_theme"):
+                qdt.setup_theme(theme)
+                base_sheet = app.styleSheet()
+            elif hasattr(qdt, "load_stylesheet"):
+                # Compatibility with older qdarktheme releases that expose
+                # stylesheet/palette helpers instead of setup_theme().
+                if hasattr(qdt, "load_palette"):
+                    app.setPalette(qdt.load_palette(theme))
+                base_sheet = str(qdt.load_stylesheet(theme))
+            else:
+                _fallback_palette(app, theme)
+                base_sheet = ""
+        except Exception:
+            _fallback_palette(app, theme)
+            base_sheet = ""
     else:
         _fallback_palette(app, theme)
         base_sheet = ""

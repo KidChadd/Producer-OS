@@ -29,6 +29,7 @@ from producer_os.ui.pages.base import BaseWizardPage
 from producer_os.ui.widgets import StatChip, StatusBadge, set_widget_role
 
 _TOKEN_SPLIT_RE = re.compile(r"[ _-]+")
+_REVIEW_WIDGET_THRESHOLD = 500
 
 
 class RunPage(BaseWizardPage):
@@ -51,6 +52,8 @@ class RunPage(BaseWizardPage):
         self._manual_overrides: dict[str, dict[str, Any]] = {}
         self._saved_hints: list[dict[str, Any]] = []
         self._preview_stale = False
+        self._has_live_logs = False
+        self._review_table_widget_mode = True
 
         action_card = self.add_card("Execution Controls", "Run an analysis first to verify routing before moving files.")
         action_row = QHBoxLayout()
@@ -177,7 +180,10 @@ class RunPage(BaseWizardPage):
         self.review_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.review_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.review_table.setAlternatingRowColors(True)
-        self.review_table.setSortingEnabled(True)
+        # Sorting a QTableWidget with thousands of rows plus per-row cell widgets
+        # (combo boxes/buttons) is unstable and very slow on Windows. Keep review
+        # filtering fast/stable and leave sorting disabled here.
+        self.review_table.setSortingEnabled(False)
         header = self.review_table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, header.ResizeMode.ResizeToContents)
@@ -301,10 +307,18 @@ class RunPage(BaseWizardPage):
         self._manual_overrides = {}
         self._saved_hints = []
         self._preview_stale = False
+        self._has_live_logs = False
         self.review_feedback_label.setText("")
         self.save_report_btn.setVisible(False)
         self.status_badge.set_status("Working", kind="running", pulsing=True)
         self.preview_stale_label.setText("Preview reflects the latest analyze/dry-run report.")
+
+    def append_log_line(self, line: str) -> None:
+        text = str(line or "").rstrip("\r\n")
+        if not text:
+            return
+        self.log_edit.append(text)
+        self._has_live_logs = True
 
     def set_results(self, report: dict, log_lines: list[str], bucket_choices: Optional[list[str]] = None) -> None:
         self._report = dict(report or {})
@@ -330,7 +344,8 @@ class RunPage(BaseWizardPage):
         self._refresh_pack_filters()
 
         self._update_summary_label()
-        self._rebuild_pack_breakdown()
+        if not self._has_live_logs:
+            self._rebuild_pack_breakdown()
         self._apply_review_filters()
         self._apply_preview_filters()
         self._update_preview_stale_state()
@@ -472,6 +487,15 @@ class RunPage(BaseWizardPage):
             f"Showing {len(filtered)} row(s). Total files: {total}. Low-confidence: {low_total}. "
             f"Manual overrides: {len(self._manual_overrides)}."
         )
+        if len(filtered) > _REVIEW_WIDGET_THRESHOLD:
+            self.review_feedback_label.setText(
+                "Large review set detected. Row edit controls are temporarily disabled to keep the UI stable. "
+                f"Narrow the review filters to {_REVIEW_WIDGET_THRESHOLD} rows or fewer to enable per-row overrides and hints."
+            )
+            self.review_feedback_label.setProperty("state", "warning")
+        elif self.review_feedback_label.text().startswith("Large review set detected."):
+            self.review_feedback_label.setText("")
+            self.review_feedback_label.setProperty("state", None)
 
     def _apply_preview_filters(self) -> None:
         query = (self.preview_search.text() or "").strip().lower()
@@ -510,58 +534,79 @@ class RunPage(BaseWizardPage):
         self._render_preview_table(rows)
 
     def _render_review_table(self, rows: list[dict[str, Any]]) -> None:
-        self.review_table.setSortingEnabled(False)
-        self.review_table.setRowCount(0)
+        table = self.review_table
+        widget_mode = len(rows) <= _REVIEW_WIDGET_THRESHOLD
+        self._review_table_widget_mode = widget_mode
+        prev_updates = table.updatesEnabled()
+        table.setUpdatesEnabled(False)
+        table.blockSignals(True)
+        table.setSortingEnabled(False)
+        table.setRowCount(0)
+        table.setRowCount(len(rows))
 
-        for row in rows:
-            r = self.review_table.rowCount()
-            self.review_table.insertRow(r)
-            source = str(row.get("source", ""))
-            effective_bucket = str(row.get("effective_bucket") or row.get("chosen_bucket") or "")
+        try:
+            for r, row in enumerate(rows):
+                source = str(row.get("source", ""))
+                effective_bucket = str(row.get("effective_bucket") or row.get("chosen_bucket") or "")
 
-            items = [
-                QTableWidgetItem(str(row.get("pack", ""))),
-                QTableWidgetItem(str(row.get("file", ""))),
-                QTableWidgetItem(effective_bucket),
-                QTableWidgetItem(f"{float(row.get('confidence_ratio', 0.0) or 0.0):.4f}"),
-                QTableWidgetItem(f"{float(row.get('confidence_margin', 0.0) or 0.0):.2f}"),
-                QTableWidgetItem(self._top3_text(row)),
-            ]
-            for col, item in enumerate(items):
-                item.setData(Qt.ItemDataRole.UserRole, source)
-                if bool(row.get("low_confidence", False)):
-                    item.setData(Qt.ItemDataRole.UserRole + 1, True)
-                self.review_table.setItem(r, col, item)
+                items = [
+                    QTableWidgetItem(str(row.get("pack", ""))),
+                    QTableWidgetItem(str(row.get("file", ""))),
+                    QTableWidgetItem(effective_bucket),
+                    QTableWidgetItem(f"{float(row.get('confidence_ratio', 0.0) or 0.0):.4f}"),
+                    QTableWidgetItem(f"{float(row.get('confidence_margin', 0.0) or 0.0):.2f}"),
+                    QTableWidgetItem(self._top3_text(row)),
+                ]
+                for col, item in enumerate(items):
+                    item.setData(Qt.ItemDataRole.UserRole, source)
+                    if bool(row.get("low_confidence", False)):
+                        item.setData(Qt.ItemDataRole.UserRole + 1, True)
+                    table.setItem(r, col, item)
 
-            override_combo = QComboBox()
-            override_combo.addItems(self._bucket_choices or [effective_bucket])
-            combo_bucket = effective_bucket
-            idx = override_combo.findText(combo_bucket)
-            override_combo.setCurrentIndex(max(0, idx))
-            override_combo.setProperty("source", source)
-            override_combo.currentTextChanged.connect(
-                lambda value, cb=override_combo: self._on_override_combo_changed(str(cb.property("source") or ""), value)
-            )
-            self.review_table.setCellWidget(r, 6, override_combo)
+                if widget_mode:
+                    override_combo = QComboBox()
+                    override_combo.addItems(self._bucket_choices or [effective_bucket])
+                    combo_bucket = effective_bucket
+                    idx = override_combo.findText(combo_bucket)
+                    override_combo.setCurrentIndex(max(0, idx))
+                    override_combo.setProperty("source", source)
+                    override_combo.currentTextChanged.connect(
+                        lambda value, cb=override_combo: self._on_override_combo_changed(
+                            str(cb.property("source") or ""), value
+                        )
+                    )
+                    table.setCellWidget(r, 6, override_combo)
 
-            hint_btn = QPushButton("Hints…")
-            set_widget_role(hint_btn, "ghost")
-            hint_btn.setProperty("source", source)
-            hint_btn.clicked.connect(lambda _=False, btn=hint_btn: self._open_hint_menu(btn))
-            self.review_table.setCellWidget(r, 7, hint_btn)
+                    hint_btn = QPushButton("Hints…")
+                    set_widget_role(hint_btn, "ghost")
+                    hint_btn.setProperty("source", source)
+                    hint_btn.clicked.connect(lambda _=False, btn=hint_btn: self._open_hint_menu(btn))
+                    table.setCellWidget(r, 7, hint_btn)
+                else:
+                    override_item = QTableWidgetItem("Narrow filter to edit")
+                    override_item.setData(Qt.ItemDataRole.UserRole, source)
+                    table.setItem(r, 6, override_item)
+                    hint_item = QTableWidgetItem("Narrow filter to use hints")
+                    hint_item.setData(Qt.ItemDataRole.UserRole, source)
+                    table.setItem(r, 7, hint_item)
+        finally:
+            table.blockSignals(False)
+            table.setUpdatesEnabled(prev_updates)
 
-        self.review_table.setSortingEnabled(True)
-        if self.review_table.rowCount() > 0:
-            self.review_table.selectRow(0)
+        if table.rowCount() > 0:
+            table.selectRow(0)
         else:
             self.review_details.setPlainText("No rows match the current filter.")
 
     def _render_preview_table(self, rows: list[dict[str, Any]]) -> None:
-        self.preview_table.setSortingEnabled(False)
-        self.preview_table.setRowCount(0)
-        for row in rows:
-            r = self.preview_table.rowCount()
-            self.preview_table.insertRow(r)
+        table = self.preview_table
+        prev_updates = table.updatesEnabled()
+        table.setUpdatesEnabled(False)
+        table.blockSignals(True)
+        table.setSortingEnabled(False)
+        table.setRowCount(0)
+        table.setRowCount(len(rows))
+        for r, row in enumerate(rows):
             effective_bucket = str(row.get("effective_bucket") or row.get("chosen_bucket") or "")
             low_conf = bool(row.get("low_confidence", False))
             values = [
@@ -575,8 +620,12 @@ class RunPage(BaseWizardPage):
                 str(row.get("source", "")),
             ]
             for c, value in enumerate(values):
-                self.preview_table.setItem(r, c, QTableWidgetItem(value))
-        self.preview_table.setSortingEnabled(True)
+                table.setItem(r, c, QTableWidgetItem(value))
+        table.blockSignals(False)
+        table.setUpdatesEnabled(prev_updates)
+        # Sorting on very large preview tables can make filter toggles feel like crashes.
+        if len(rows) <= 2000:
+            table.setSortingEnabled(True)
 
     def _update_preview_stale_state(self) -> None:
         self._preview_stale = bool(self._manual_overrides or self._saved_hints)
