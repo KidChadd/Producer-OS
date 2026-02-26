@@ -90,10 +90,10 @@ try {
         }
         try {
             $sig = Get-AuthenticodeSignature -FilePath $artifact
-            Write-SigningSummary "Signature status for $artifact: $($sig.Status)"
+            Write-SigningSummary "Signature status for ${artifact}: $($sig.Status)"
         }
         catch {
-            Write-SigningSummary "Signature status check failed for $artifact: $($_.Exception.Message)"
+            Write-SigningSummary "Signature status check failed for ${artifact}: $($_.Exception.Message)"
         }
     }
 
