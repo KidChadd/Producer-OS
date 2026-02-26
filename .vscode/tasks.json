@@ -154,7 +154,7 @@
       "args": [
         "scripts\\profile_engine_extract.py",
         "--root",
-        "${workspaceFolder}\\test related samples unorganised",
+        "${input:profileCorpusRoot}",
         "--limit",
         "500",
         "--profile"
@@ -165,6 +165,22 @@
           "PYTHONUTF8": "1",
           "PYTHONIOENCODING": "utf-8"
         }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Local: Cleanup generated artifacts",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts\\cleanup_local.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
     },
@@ -182,6 +198,14 @@
         }
       },
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "profileCorpusRoot",
+      "type": "promptString",
+      "description": "Local sample corpus root for profiling tasks",
+      "default": "${workspaceFolder}\\test related samples unorganised"
     }
   ]
 }

@@ -3,6 +3,10 @@ docuwriter_upload/
 ProducerOS-docuwriter-upload.zip
 tree.clean.txt
 *.bak
+# Local IDE / editor artifacts
+.vscode/.vs/
+.vscode/mcp.json
+mcp.json
 # Virtual environments
 .venv*/
 env*/
@@ -40,6 +44,8 @@ Thumbs.db
 # Runtime directories
 _hub/
 _inbox/
+_smoke_hub/
+_smoke_tiny_analyze_hub/
 
 # Local profiling / sample corpora (machine-specific)
 .tmp_profile_hub*/

@@ -10,6 +10,11 @@ on:
         description: "Existing version tag to build (e.g. v0.1.2)"
         required: true
         type: string
+      use_latest_ci_scripts:
+        description: "Overlay latest CI scripts from origin/main (breaks strict tag reproducibility)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -24,11 +29,12 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    environment: release
     timeout-minutes: 240
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -58,16 +64,31 @@ jobs:
           git fetch --tags --force
           git checkout "refs/tags/${{ steps.release_meta.outputs.tag }}"
 
-      - name: Overlay latest CI build scripts (manual rebuild drift fix)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Overlay latest CI build scripts (manual dispatch, opt-in)
+        id: ci_script_overlay
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.use_latest_ci_scripts == 'true'
         shell: pwsh
         run: |
           git fetch origin main --depth=1
+          $overlayCommit = (git rev-parse origin/main)
           git checkout origin/main -- .github/scripts/build_windows_nuitka.ps1 .github/scripts/sign_windows_artifacts.ps1
-          Write-Host "Using CI build scripts from origin/main for manual tag rebuild."
+          "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "commit=$overlayCommit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Using CI build scripts from origin/main commit $overlayCommit for manual tag rebuild."
+
+      - name: Normalize CI script overlay metadata
+        id: ci_script_overlay_meta
+        shell: pwsh
+        run: |
+          $enabled = "${{ steps.ci_script_overlay.outputs.enabled }}"
+          if ([string]::IsNullOrWhiteSpace($enabled)) { $enabled = "false" }
+          $commit = "${{ steps.ci_script_overlay.outputs.commit }}"
+          if ([string]::IsNullOrWhiteSpace($commit)) { $commit = "none" }
+          "enabled=$enabled" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "commit=$commit" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
           cache: pip
@@ -78,10 +99,7 @@ jobs:
         shell: pwsh
         run: |
           $start = Get-Date
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,gui]"
-          python -m pip uninstall -y nuitka
-          python -m pip install --no-cache-dir nuitka==2.8.10
+          & ".github\scripts\install_ci_python_deps.ps1" -Extras "dev,gui" -ConstraintsFile ".github/constraints/ci-tools.txt"
           python -m nuitka --version
           $elapsed = [Math]::Round(((Get-Date) - $start).TotalSeconds, 3)
           "elapsed_seconds=$elapsed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -91,6 +109,8 @@ jobs:
         run: |
           Write-Host "Event: ${{ github.event_name }}"
           Write-Host "Release tag: ${{ steps.release_meta.outputs.tag }}"
+          Write-Host "CI script overlay enabled: ${{ steps.ci_script_overlay_meta.outputs.enabled }}"
+          Write-Host "CI script overlay origin/main commit: ${{ steps.ci_script_overlay_meta.outputs.commit }}"
           Write-Host "Workflow ref: ${{ github.workflow_ref }}"
           Write-Host "Checked out commit: $(git rev-parse HEAD)"
           Write-Host "Checked out ref: $(git describe --tags --always --dirty)"
@@ -126,6 +146,17 @@ jobs:
             -ZipOutput $zip
           "zip_path=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Append reproducibility metadata
+        shell: pwsh
+        run: |
+          $info = "dist\BUILD_INFO.txt"
+          if (!(Test-Path $info)) { throw "Missing build info report: $info" }
+          Add-Content -Path $info -Value @(
+            "ci_script_overlay_enabled`t${{ steps.ci_script_overlay_meta.outputs.enabled }}",
+            "ci_script_overlay_origin_main_commit`t${{ steps.ci_script_overlay_meta.outputs.commit }}"
+          )
+          Get-Content $info | Select-Object -Last 2 | ForEach-Object { Write-Host $_ }
+
       - name: Start installer timer
         id: installer_timer_start
         shell: pwsh
@@ -133,7 +164,7 @@ jobs:
           "utc_start=$([DateTime]::UtcNow.ToString('o'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Build installer
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.6
+        uses: Minionguyjpro/Inno-Setup-Action@e3458b12721a98eee2112ea817d1a50467d6cbec # v1.2.6
         with:
           path: build/installer/ProducerOS.iss
           options: /DMyAppVersion=${{ steps.release_meta.outputs.version }}
@@ -226,7 +257,7 @@ jobs:
           "checksum_path=$checksumFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
         with:
           tag_name: ${{ steps.release_meta.outputs.tag }}
           name: ${{ steps.release_meta.outputs.tag }}

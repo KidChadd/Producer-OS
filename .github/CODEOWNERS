@@ -1,0 +1,7 @@
+# Default owner
+* @KidChadd
+
+# CI/CD and release automation changes require explicit owner review
+/.github/workflows/* @KidChadd
+/.github/scripts/* @KidChadd
+/.github/constraints/* @KidChadd
