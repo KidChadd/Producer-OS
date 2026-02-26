@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-02-26)
+
+### Features
+
+- **ui**: Ship polished review workflow and appearance controls
+  ([`b6039bf`](https://github.com/KidChadd/Producer-OS/commit/b6039bff1cbc8a93616397430edb81e9d623d1bb))
+
+
 ## v0.4.3 (2026-02-26)
 
 ### Performance Improvements
