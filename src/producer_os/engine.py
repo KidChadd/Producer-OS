@@ -28,6 +28,7 @@ import csv
 import datetime
 import json
 import os
+import re
 import shutil
 import uuid
 import warnings
@@ -37,16 +38,28 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, TypeAl
 
 from .bucket_service import BucketService
 from .styles_service import StyleService
+from . import tuning
 
 
-class PackFileEntry(TypedDict):
+class PackFileEntry(TypedDict, total=False):
     source: str
     dest: str
     bucket: str
+    chosen_bucket: str
     category: str
     confidence: float
     action: str
     reason: str
+    confidence_ratio: float
+    confidence_margin: float
+    low_confidence: bool
+    top_candidates: list[dict[str, Any]]
+    top_3_candidates: list[dict[str, Any]]
+    folder_matches: list[dict[str, Any]]
+    filename_matches: list[dict[str, Any]]
+    audio_summary: dict[str, Any]
+    pitch_summary: dict[str, Any]
+    glide_summary: dict[str, Any]
 
 
 class PackReport(TypedDict, total=False):
@@ -57,51 +70,12 @@ class PackReport(TypedDict, total=False):
     errors: list[str]
 
 
-# ---------------------------------------------------------------------------
-# Tuning constants (can be overridden by tuning.json via _load_tuning_overrides)
-FOLDER_HINT_WEIGHT = 50
-FILENAME_HINT_WEIGHT = 25
-FOLDER_HINT_CAP = 80
-FILENAME_HINT_CAP = 40
-
-LOW_CONFIDENCE_THRESHOLD = 0.75
-PARENT_FOLDER_LEVELS_TO_SCAN = 5
-
-FEATURE_THRESHOLDS: Dict[str, float] = {
-    "808_duration_min": 0.45,
-    "kick_duration_max": 0.35,
-    "lowfreq_ratio_808": 0.60,
-    "lowfreq_ratio_hat_max": 0.20,
-    "centroid_bright": 4000,
-    "centroid_low": 300,
-    "transient_kick_min": 3.0,
-    "zcr_tonal_max": 0.08,
-    "flatness_high": 0.3,
-    "zcr_high": 0.1,
-    "centroid_moderate_low": 1000,
-    "centroid_moderate_high": 3000,
-}
-
-AUDIO_WEIGHTS: Dict[str, float] = {
-    "duration": 10,
-    "lowfreq": 15,
-    "centroid": 10,
-    "transient": 20,
-    "zcr": 10,
-    "flatness": 10,
-}
-
-PITCH_WEIGHTS: Dict[str, float] = {
-    "median_f0_low": 20,
-    "voiced_ratio": 10,
-    "glide_bonus": 10,
-    "stability_bonus": 10,
-}
-
-
 def _clamp(val: float, min_val: float, max_val: float) -> float:
     """Clamp val between min_val and max_val."""
     return max(min_val, min(max_val, val))
+
+
+_HINT_SPLIT_RE = re.compile(r"[ _-]+")
 
 
 # A classification is represented as a tuple:
@@ -127,7 +101,7 @@ class ProducerOSEngine:
     bucket_service: BucketService = field(default_factory=BucketService)
 
     ignore_rules: Iterable[str] = field(default_factory=lambda: ["__MACOSX", ".DS_Store", "._"])
-    confidence_threshold: float = 0.75
+    confidence_threshold: float = tuning.LOW_CONFIDENCE_THRESHOLD
 
     # Bucket rules: maps bucket names to lists of substrings to search for
     BUCKET_RULES: Dict[str, List[str]] = field(
@@ -182,10 +156,10 @@ class ProducerOSEngine:
 
     # Internal state
     _feature_cache: Dict[str, Any] = field(init=False, default_factory=dict)
-    _tuning_loaded: bool = field(init=False, default=False)
     _audio_backend: Optional[Dict[str, Any]] = field(init=False, default=None)
     _audio_backend_checked: bool = field(init=False, default=False)
     _fft_low_mask_cache: Dict[Tuple[int, int, float], Tuple[Any, Any]] = field(init=False, default_factory=dict)
+    _tuning_loaded: bool = field(init=False, default=False)
     current_mode: str = field(init=False, default="analyze")
 
     def __post_init__(self) -> None:
@@ -204,11 +178,18 @@ class ProducerOSEngine:
         tuning_paths: List[Path] = []
 
         if isinstance(self.config, dict):
-            for key in ("config_path", "config_dir", "tuning_path"):
-                p = self.config.get(key)
-                if p:
-                    tuning_paths.append(Path(p) / "tuning.json")
+            config_dir = self.config.get("config_dir") or self.config.get("config_path")
+            if config_dir:
+                config_dir_path = Path(config_dir)
+                tuning_paths.append(config_dir_path / "tuning.json")
+            tuning_path = self.config.get("tuning_path")
+            if tuning_path:
+                tuning_path_obj = Path(tuning_path)
+                tuning_paths.append(
+                    tuning_path_obj if tuning_path_obj.suffix.lower() == ".json" else (tuning_path_obj / "tuning.json")
+                )
 
+        tuning_paths.append(self.hub_dir / "config" / "tuning.json")
         tuning_paths.append(self.hub_dir / "tuning.json")
 
         for path in tuning_paths:
@@ -216,12 +197,7 @@ class ProducerOSEngine:
                 if path.exists():
                     data = json.loads(path.read_text(encoding="utf-8"))
                     if isinstance(data, dict):
-                        for key, value in data.items():
-                            if key in globals():
-                                if isinstance(value, (int, float)):
-                                    globals()[key] = value
-                                elif isinstance(value, dict) and isinstance(globals()[key], dict):
-                                    globals()[key].update(value)
+                        tuning.apply_overrides(data)
                     self._tuning_loaded = True
                     return
             except Exception:
@@ -253,28 +229,30 @@ class ProducerOSEngine:
 
         self._audio_backend_checked = True
         try:
-            import numpy as np  # type: ignore
             import librosa  # type: ignore
+            import numpy as np  # type: ignore
             import soundfile as sf  # type: ignore
         except Exception:
             self._audio_backend = None
             return None
 
+        # Cache concrete function refs to avoid repeated lazy-loader lookups in hot paths.
         feature_mod = librosa.feature
         self._audio_backend = {
             "np": np,
             "sf": sf,
             "stft": librosa.stft,
-            "yin": librosa.yin,
             "fft_frequencies": librosa.fft_frequencies,
+            "yin": librosa.yin,
             "rms": feature_mod.rms,
             "zero_crossing_rate": feature_mod.zero_crossing_rate,
         }
         return self._audio_backend
 
-    def _get_fft_low_mask(self, sr: int, win: int, cutoff_hz: float = 120.0) -> Tuple[Any, Any]:
-        """Return cached FFT frequency bins and low-frequency mask."""
-        key = (int(sr), int(win), float(cutoff_hz))
+    def _get_fft_low_mask(self, sr: int, win: int) -> Tuple[Any, Any]:
+        """Return cached FFT frequency bins and low-frequency mask for a sample rate/window."""
+        cutoff = float(tuning.ANALYSIS_PARAMS["low_freq_cutoff_hz"])
+        key = (int(sr), int(win), cutoff)
         cached = self._fft_low_mask_cache.get(key)
         if cached is not None:
             return cached
@@ -282,8 +260,9 @@ class ProducerOSEngine:
         backend = self._get_audio_backend()
         if backend is None:
             raise RuntimeError("Audio backend unavailable")
-        freqs = backend["fft_frequencies"](sr=sr, n_fft=win)
-        low_mask = freqs < float(cutoff_hz)
+        fft_frequencies = backend["fft_frequencies"]
+        freqs = fft_frequencies(sr=sr, n_fft=win)
+        low_mask = freqs < cutoff
         self._fft_low_mask_cache[key] = (freqs, low_mask)
         return freqs, low_mask
 
@@ -320,31 +299,86 @@ class ProducerOSEngine:
 
     # ------------------------------------------------------------------
     # Scoring helpers
-    def _get_folder_hint_scores(self, file_path: Path) -> Dict[str, int]:
+    def _hint_tokens(self, text: str) -> List[str]:
+        return [tok for tok in _HINT_SPLIT_RE.split((text or "").lower()) if tok]
+
+    def _pattern_matches_text(self, pattern: str, raw_text_lower: str, tokens: List[str]) -> bool:
+        if not pattern or pattern == ".mid":
+            return False
+        pat_lower = pattern.lower()
+        pat_tokens = self._hint_tokens(pat_lower)
+        if not pat_tokens:
+            return False
+
+        token_set = set(tokens)
+        normalized_text = " ".join(tokens)
+        compact_text = "".join(tokens)
+        pat_norm = " ".join(pat_tokens)
+        pat_compact = "".join(pat_tokens)
+
+        if len(pat_tokens) == 1 and pat_tokens[0] in token_set:
+            return True
+        if pat_norm and pat_norm in normalized_text:
+            return True
+        if pat_compact and pat_compact in compact_text:
+            return True
+        # Fallback for partial patterns like "melod" and names like "808sPack".
+        return pat_lower in raw_text_lower
+
+    def _get_folder_hint_details(self, file_path: Path) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
         scores: Dict[str, int] = {bucket: 0 for bucket in self.BUCKET_RULES.keys()}
-        parts = list(file_path.parent.parts)[-PARENT_FOLDER_LEVELS_TO_SCAN:]
+        matches: List[Dict[str, Any]] = []
+        parts = list(file_path.parent.parts)[-tuning.PARENT_FOLDER_LEVELS_TO_SCAN:]
         for part in parts:
             part_lower = part.lower()
+            tokens = self._hint_tokens(part)
             for bucket, patterns in self.BUCKET_RULES.items():
                 for pat in patterns:
-                    if pat.lower() in part_lower:
-                        scores[bucket] += FOLDER_HINT_WEIGHT
-        for bucket in scores:
-            scores[bucket] = min(scores[bucket], FOLDER_HINT_CAP)
+                    if self._pattern_matches_text(pat, part_lower, tokens):
+                        previous = scores[bucket]
+                        scores[bucket] = min(scores[bucket] + tuning.FOLDER_HINT_WEIGHT, tuning.FOLDER_HINT_CAP)
+                        if scores[bucket] > previous:
+                            matches.append(
+                                {
+                                    "bucket": bucket,
+                                    "keyword": pat,
+                                    "folder": part,
+                                    "added": scores[bucket] - previous,
+                                    "score_after": scores[bucket],
+                                }
+                            )
+        return scores, matches
+
+    def _get_folder_hint_scores(self, file_path: Path) -> Dict[str, int]:
+        scores, _matches = self._get_folder_hint_details(file_path)
         return scores
 
-    def _get_filename_hint_scores(self, filename: str) -> Dict[str, int]:
+    def _get_filename_hint_details(self, filename: str) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
         scores: Dict[str, int] = {bucket: 0 for bucket in self.BUCKET_RULES.keys()}
+        matches: List[Dict[str, Any]] = []
         lower_name = filename.lower()
+        tokens = self._hint_tokens(Path(filename).stem)
         for bucket, patterns in self.BUCKET_RULES.items():
-            count = 0
             for pat in patterns:
                 if pat == ".mid":
                     continue
-                if pat.lower() in lower_name:
-                    count += 1
-            if count:
-                scores[bucket] = min(count * FILENAME_HINT_WEIGHT, FILENAME_HINT_CAP)
+                if self._pattern_matches_text(pat, lower_name, tokens):
+                    previous = scores[bucket]
+                    scores[bucket] = min(scores[bucket] + tuning.FILENAME_HINT_WEIGHT, tuning.FILENAME_HINT_CAP)
+                    if scores[bucket] > previous:
+                        matches.append(
+                            {
+                                "bucket": bucket,
+                                "keyword": pat,
+                                "filename": filename,
+                                "added": scores[bucket] - previous,
+                                "score_after": scores[bucket],
+                            }
+                        )
+        return scores, matches
+
+    def _get_filename_hint_scores(self, filename: str) -> Dict[str, int]:
+        scores, _matches = self._get_filename_hint_details(filename)
         return scores
 
     # ------------------------------------------------------------------
@@ -357,9 +391,9 @@ class ProducerOSEngine:
         """
         try:
             stat = file_path.stat()
-            key = f"{file_path}|{stat.st_size}|{int(stat.st_mtime)}"
+            key = f"{file_path.resolve()}|{stat.st_size}|{stat.st_mtime}"
         except Exception:
-            key = str(file_path)
+            key = str(file_path.resolve() if isinstance(file_path, Path) else file_path)
 
         if key in self._feature_cache:
             cached = self._feature_cache.get(key)
@@ -369,14 +403,27 @@ class ProducerOSEngine:
         # Default zeroed features
         features: Dict[str, Any] = {
             "duration": 0.0,
+            "duration_seconds": 0.0,
+            "sample_rate": 0,
+            "num_samples": 0,
+            "analysis_window": int(tuning.ANALYSIS_PARAMS["win"]),
+            "analysis_hop": int(tuning.ANALYSIS_PARAMS["hop"]),
+            "rms_global": 0.0,
+            "rms_frame_mean": 0.0,
+            "rms_frame_max": 0.0,
             "low_freq_ratio": 0.0,
+            "low_freq_energy_ratio": 0.0,
             "transient_strength": 0.0,
             "centroid_mean": 0.0,
             "centroid_early": 0.0,
             "zcr_mean": 0.0,
             "flatness_mean": 0.0,
+            "pitch_available": False,
+            "f0_frames": 0,
+            "voiced_frames": 0,
             "voiced_ratio": 0.0,
             "median_f0": 0.0,
+            "semitone_std": 0.0,
             "pitch_std": 0.0,
             "glide_detected": False,
             "glide_confidence": 0.0,
@@ -390,7 +437,7 @@ class ProducerOSEngine:
         np = backend["np"]
         sf = backend["sf"]
         stft = backend["stft"]
-        yin_fn = backend["yin"]
+        yin = backend["yin"]
         rms_fn = backend["rms"]
         zcr_fn = backend["zero_crossing_rate"]
 
@@ -399,8 +446,9 @@ class ProducerOSEngine:
             if isinstance(data, (list, tuple)):
                 data = np.array(data, dtype=np.float32)
             arr = np.asarray(data, dtype=np.float32)
-            if getattr(arr, "ndim", 1) == 2:
+            if arr.ndim == 2:
                 if arr.shape[1] >= 2:
+                    # Spec mono conversion: x = 0.5 * (L + R)
                     y = 0.5 * (arr[:, 0] + arr[:, 1])
                 elif arr.shape[1] == 1:
                     y = arr[:, 0]
@@ -410,29 +458,24 @@ class ProducerOSEngine:
                 y = arr
             y = np.ascontiguousarray(y, dtype=np.float32)
 
-            eps = 1e-9
-            max_val = float(np.max(np.abs(y))) if y.size > 0 else 0.0
-            y_norm = y / (max_val + eps)
-            # Number of samples in the normalized signal
-            n = len(y_norm)
-            # Duration in seconds
+            n = int(len(y))
+            features["sample_rate"] = int(sr)
+            features["num_samples"] = n
             duration = (float(n) / float(sr)) if sr else 0.0
             features["duration"] = duration
+            features["duration_seconds"] = duration
 
-            # ------------------------------------------------------------------
-            # Frame parameters (adaptive for very short samples)
-            # Avoid librosa warnings and improve analysis of tiny one‑shots.
-            win = 2048
-            # Clamp window length based on signal length
-            if n <= 0:
-                # Empty input; avoid negative or zero window sizes
-                win = 1
-            elif n < win:
-                # Use the full signal length when it is shorter than the default window
-                win = n  # must not exceed signal length
+            eps = float(tuning.ANALYSIS_PARAMS["eps"])
+            max_abs = float(np.max(np.abs(y))) if n > 0 else 0.0
+            y_norm = y / (max_abs + eps)
 
-            # Keep hop length proportional and valid
-            hop = min(512, max(1, win // 4))
+            win = int(tuning.ANALYSIS_PARAMS["win"])
+            hop = int(tuning.ANALYSIS_PARAMS["hop"])
+            features["analysis_window"] = win
+            features["analysis_hop"] = hop
+
+            if n > 0:
+                features["rms_global"] = float(np.sqrt(np.mean(np.square(y_norm))))
 
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -442,15 +485,19 @@ class ProducerOSEngine:
                 )
                 S = np.abs(stft(y_norm, n_fft=win, hop_length=hop, window="hann"))
             P = S**2
-            freqs, low_mask = self._get_fft_low_mask(int(sr), win, 120.0)
+            freqs, low_mask = self._get_fft_low_mask(int(sr), win)
 
             total_power = float(np.sum(P))
             low_power = float(np.sum(P[low_mask, :])) if P.size > 0 else 0.0
-            features["low_freq_ratio"] = float(low_power) / float(total_power + eps)
+            low_ratio = float(low_power) / float(total_power + eps)
+            features["low_freq_ratio"] = low_ratio
+            features["low_freq_energy_ratio"] = low_ratio
 
             rms = rms_fn(S=S, hop_length=hop)[0]
-            early_frames = int((0.08 * sr) / hop + 0.999)
-            mid_frames = int((0.20 * sr) / hop + 0.999)
+            features["rms_frame_mean"] = float(np.mean(rms)) if len(rms) > 0 else 0.0
+            features["rms_frame_max"] = float(np.max(rms)) if len(rms) > 0 else 0.0
+            early_frames = int((float(tuning.ANALYSIS_PARAMS["transient_early_seconds"]) * sr) / hop + 0.999)
+            mid_frames = int((float(tuning.ANALYSIS_PARAMS["transient_mid_seconds"]) * sr) / hop + 0.999)
             if len(rms) > 0:
                 peak_early = float(np.max(rms[: max(1, early_frames)]))
                 start_mid = min(len(rms), early_frames)
@@ -464,7 +511,7 @@ class ProducerOSEngine:
             else:
                 centroid = np.array([], dtype=np.float32)
             features["centroid_mean"] = float(np.mean(centroid)) if centroid.size > 0 else 0.0
-            early_centroid_frames = int((0.10 * sr) / hop + 0.999)
+            early_centroid_frames = int((float(tuning.ANALYSIS_PARAMS["centroid_early_seconds"]) * sr) / hop + 0.999)
             features["centroid_early"] = (
                 float(np.mean(centroid[: max(1, early_centroid_frames)]))
                 if centroid.size > 0
@@ -475,7 +522,8 @@ class ProducerOSEngine:
             features["zcr_mean"] = float(np.mean(zcr)) if zcr.size > 0 else 0.0
 
             if P.size > 0:
-                P_safe = np.maximum(P, 1e-10)
+                flatness_amin = float(tuning.ANALYSIS_PARAMS.get("flatness_amin", 1e-10))
+                P_safe = np.maximum(P, flatness_amin)
                 geom_mean = np.exp(np.mean(np.log(P_safe), axis=0))
                 arith_mean = np.mean(P_safe, axis=0)
                 flatness = geom_mean / (arith_mean + eps)
@@ -485,8 +533,7 @@ class ProducerOSEngine:
 
             # Pitch (yin)
             try:
-                # librosa.yin needs enough samples for low fmin (avoid inaccurate pitch detection warning)
-                yin_frame_length = max(int(win), 2207)
+                yin_frame_length = max(int(win), int(tuning.PITCH_ANALYSIS_PARAMS["yin_frame_length_min"]))
                 if n < yin_frame_length:
                     raise ValueError("Signal too short for YIN frame length")
                 with warnings.catch_warnings():
@@ -495,19 +542,31 @@ class ProducerOSEngine:
                         message=r"With fmin=.*less than two periods of fmin fit into the frame.*",
                         category=UserWarning,
                     )
-                    f0 = yin_fn(y_norm, fmin=20, fmax=2000, sr=sr, frame_length=yin_frame_length, hop_length=hop)
+                    f0 = yin(
+                        y_norm,
+                        fmin=float(tuning.PITCH_ANALYSIS_PARAMS["yin_fmin"]),
+                        fmax=float(tuning.PITCH_ANALYSIS_PARAMS["yin_fmax"]),
+                        sr=sr,
+                        frame_length=yin_frame_length,
+                        hop_length=hop,
+                    )
+                features["pitch_available"] = True
                 valid = np.isfinite(f0) & (f0 > 0)
+                features["f0_frames"] = int(len(f0))
+                features["voiced_frames"] = int(np.sum(valid))
                 voiced_ratio = float(np.sum(valid)) / float(len(f0)) if len(f0) > 0 else 0.0
                 features["voiced_ratio"] = voiced_ratio
                 if bool(np.any(valid)):
                     vf0 = f0[valid]
                     features["median_f0"] = float(np.median(vf0))
                     s = 12.0 * np.log2(vf0 / 55.0)
-                    features["pitch_std"] = float(np.std(s)) if s.size > 0 else 0.0
+                    semitone_std = float(np.std(s)) if s.size > 0 else 0.0
+                    features["semitone_std"] = semitone_std
+                    features["pitch_std"] = semitone_std
                 glide_info = self._detect_glide(f0, sr, yin_frame_length, hop)
                 features.update(glide_info)
             except Exception:
-                pass
+                features["pitch_available"] = False
 
         except Exception:
             # Keep zeroed features on failure
@@ -518,7 +577,18 @@ class ProducerOSEngine:
 
     def _detect_glide(self, f0, sr: int, win: int, hop: int) -> Dict[str, Any]:
         """Detect pitch glide (best-effort). Requires numpy and scipy."""
-        result = {"glide_detected": False, "glide_confidence": 0.0, "glide_drop": 0.0}
+        result: Dict[str, Any] = {
+            "glide_detected": False,
+            "glide_confidence": 0.0,
+            "glide_drop": 0.0,
+            "glide_drop_st": 0.0,
+            "glide_slope_st_per_sec": 0.0,
+            "glide_residual_mad": 0.0,
+            "glide_voiced_frames": 0,
+            "glide_voiced_ratio": 0.0,
+            "glide_duration": 0.0,
+            "glide_guardrails_passed": False,
+        }
 
         try:
             import numpy as np  # type: ignore
@@ -528,41 +598,54 @@ class ProducerOSEngine:
         try:
             if f0 is None or len(f0) == 0:
                 return result
-            valid_mask = ~np.isnan(f0)
-            total_frames = len(f0)
+            valid_mask = np.isfinite(f0) & (f0 > 0)
+            total_frames = int(len(f0))
             voiced_count = int(np.sum(valid_mask))
-            voiced_ratio = voiced_count / total_frames if total_frames > 0 else 0.0
-            duration = (total_frames * hop) / float(sr)
+            voiced_ratio = (float(voiced_count) / float(total_frames)) if total_frames > 0 else 0.0
+            duration = (float(total_frames * hop) / float(sr)) if sr else 0.0
+            result["glide_voiced_frames"] = voiced_count
+            result["glide_voiced_ratio"] = voiced_ratio
+            result["glide_duration"] = duration
 
-            if duration < 0.35 or voiced_ratio < 0.35:
+            if duration < float(tuning.GLIDE_PARAMS["duration_min"]):
+                return result
+            if voiced_ratio < float(tuning.GLIDE_PARAMS["voiced_ratio_min"]):
+                return result
+            if voiced_count < int(tuning.GLIDE_PARAMS["min_voiced_frames"]):
                 return result
 
+            result["glide_guardrails_passed"] = True
             voiced_f0 = f0[valid_mask]
-            t = np.arange(len(voiced_f0)) * (hop / float(sr))
+            voiced_idx = np.flatnonzero(valid_mask)
+            t = voiced_idx.astype(float) * (hop / float(sr))
             s = 12.0 * np.log2(voiced_f0 / 55.0)
 
             try:
                 from scipy.ndimage import median_filter  # type: ignore
 
-                s_med = median_filter(s, size=5, mode="nearest")
+                s_med = median_filter(s, size=int(tuning.GLIDE_PARAMS["median_filter_size"]), mode="nearest")
             except Exception:
                 s_med = s
 
-            s_smooth = np.convolve(s_med, np.ones(5) / 5, mode="same")
+            mean_size = int(tuning.GLIDE_PARAMS["mean_filter_size"])
+            s_smooth = np.convolve(s_med, np.ones(mean_size) / float(mean_size), mode="same")
 
             n = len(s_smooth)
-            if n < 15:
+            if n < int(tuning.GLIDE_PARAMS["min_voiced_frames"]):
                 return result
 
-            start_idx = int(n * 0.10)
-            end_idx = int(n * 0.90)
+            trim_ratio = float(tuning.GLIDE_PARAMS["trim_ratio"])
+            start_idx = int(n * trim_ratio)
+            end_idx = int(n * (1.0 - trim_ratio))
             if end_idx <= start_idx:
                 return result
 
             t_u = t[start_idx:end_idx]
             s_u = s_smooth[start_idx:end_idx]
+            if len(s_u) < 3:
+                return result
 
-            max_pts = 100
+            max_pts = int(tuning.GLIDE_PARAMS["theil_sen_max_points"])
             if len(t_u) > max_pts:
                 idxs = np.linspace(0, len(t_u) - 1, max_pts, dtype=int)
                 t_sub = t_u[idxs]
@@ -582,24 +665,46 @@ class ProducerOSEngine:
 
             m = float(np.median(slopes))
             q = len(s_u)
-            q20 = int(q * 0.2)
+            q20 = int(q * float(tuning.GLIDE_PARAMS["drop_window_ratio"]))
             start_med = float(np.median(s_u[: max(1, q20)]))
             end_med = float(np.median(s_u[-max(1, q20) :]))
             drop_st = start_med - end_med
 
             b = float(np.median(s_u - m * t_u))
             residuals = s_u - (m * t_u + b)
-            mad = float(np.median(np.abs(residuals)))
+            res_med = float(np.median(residuals))
+            mad = float(np.median(np.abs(residuals - res_med)))
 
-            if drop_st >= 1.0 and m <= -2.0 and mad <= 0.35:
-                A = _clamp(drop_st / 6.0, 0.0, 1.0)
-                B = _clamp((-m) / 10.0, 0.0, 1.0)
-                C = _clamp((voiced_ratio - 0.35) / 0.35, 0.0, 1.0)
-                D = _clamp((0.35 - mad) / 0.35, 0.0, 1.0)
-                conf = 0.35 * A + 0.25 * B + 0.20 * C + 0.20 * D
+            result["glide_slope_st_per_sec"] = m
+            result["glide_drop"] = float(drop_st)
+            result["glide_drop_st"] = float(drop_st)
+            result["glide_residual_mad"] = mad
+
+            if (
+                drop_st >= float(tuning.GLIDE_PARAMS["drop_st_min"])
+                and m <= float(tuning.GLIDE_PARAMS["slope_max_st_per_sec"])
+                and mad <= float(tuning.GLIDE_PARAMS["mad_max"])
+            ):
+                A = _clamp(drop_st / float(tuning.GLIDE_PARAMS["conf_a_drop_scale"]), 0.0, 1.0)
+                B = _clamp((-m) / float(tuning.GLIDE_PARAMS["conf_b_slope_scale"]), 0.0, 1.0)
+                C = _clamp(
+                    (voiced_ratio - float(tuning.GLIDE_PARAMS["voiced_ratio_min"])) / float(tuning.GLIDE_PARAMS["voiced_ratio_min"]),
+                    0.0,
+                    1.0,
+                )
+                D = _clamp(
+                    (float(tuning.GLIDE_PARAMS["mad_max"]) - mad) / float(tuning.GLIDE_PARAMS["mad_max"]),
+                    0.0,
+                    1.0,
+                )
+                conf = (
+                    float(tuning.GLIDE_CONF_WEIGHTS["A"]) * A
+                    + float(tuning.GLIDE_CONF_WEIGHTS["B"]) * B
+                    + float(tuning.GLIDE_CONF_WEIGHTS["C"]) * C
+                    + float(tuning.GLIDE_CONF_WEIGHTS["D"]) * D
+                )
                 result["glide_detected"] = True
                 result["glide_confidence"] = float(conf)
-                result["glide_drop"] = float(drop_st)
 
             return result
         except Exception:
@@ -615,83 +720,173 @@ class ProducerOSEngine:
         transient = float(features.get("transient_strength", 0.0) or 0.0)
         zcr_mean = float(features.get("zcr_mean", 0.0) or 0.0)
         flatness_mean = float(features.get("flatness_mean", 0.0) or 0.0)
-        voiced_ratio = float(features.get("voiced_ratio", 0.0) or 0.0)
-        median_f0 = float(features.get("median_f0", 0.0) or 0.0)
-        pitch_std = float(features.get("pitch_std", 0.0) or 0.0)
-        glide_detected = bool(features.get("glide_detected", False))
-        glide_confidence = float(features.get("glide_confidence", 0.0) or 0.0)
 
         is_kick_like = (
-            duration < FEATURE_THRESHOLDS["kick_duration_max"] and transient > FEATURE_THRESHOLDS["transient_kick_min"]
+            duration < tuning.FEATURE_THRESHOLDS["kick_duration_max"] and transient > tuning.FEATURE_THRESHOLDS["transient_kick_min"]
+        )
+        tonal_808_like = (
+            duration >= tuning.FEATURE_THRESHOLDS["808_duration_min"]
+            and low_ratio >= tuning.FEATURE_THRESHOLDS["lowfreq_ratio_808"]
+            and zcr_mean <= tuning.FEATURE_THRESHOLDS["zcr_tonal_max"]
+        )
+        hat_like_separation = (
+            centroid_mean >= tuning.FEATURE_THRESHOLDS["centroid_bright"]
+            and low_ratio <= tuning.FEATURE_THRESHOLDS["lowfreq_ratio_hat_max"]
+            and flatness_mean >= tuning.FEATURE_THRESHOLDS["flatness_high"]
+            and zcr_mean >= tuning.FEATURE_THRESHOLDS["zcr_high"]
         )
 
         # 808
         if not is_kick_like:
-            if duration > FEATURE_THRESHOLDS["808_duration_min"]:
-                scores["808s"] += AUDIO_WEIGHTS["duration"]
-            if low_ratio > FEATURE_THRESHOLDS["lowfreq_ratio_808"]:
-                scores["808s"] += AUDIO_WEIGHTS["lowfreq"]
-            if centroid_mean < FEATURE_THRESHOLDS["centroid_low"]:
-                scores["808s"] += AUDIO_WEIGHTS["centroid"]
-            if zcr_mean < FEATURE_THRESHOLDS["zcr_tonal_max"]:
-                scores["808s"] += AUDIO_WEIGHTS["zcr"]
-            if 30 <= median_f0 <= 100:
-                scores["808s"] += PITCH_WEIGHTS["median_f0_low"]
-            if voiced_ratio >= 0.5:
-                scores["808s"] += PITCH_WEIGHTS["voiced_ratio"]
-            if glide_detected:
-                scores["808s"] += PITCH_WEIGHTS["glide_bonus"] * glide_confidence
-            if pitch_std < 0.2:
-                scores["808s"] += PITCH_WEIGHTS["stability_bonus"]
+            if duration > tuning.FEATURE_THRESHOLDS["808_duration_min"]:
+                scores["808s"] += tuning.AUDIO_WEIGHTS["duration"]
+            if low_ratio > tuning.FEATURE_THRESHOLDS["lowfreq_ratio_808"]:
+                scores["808s"] += tuning.AUDIO_WEIGHTS["lowfreq"]
+            if centroid_mean < tuning.FEATURE_THRESHOLDS["centroid_low"]:
+                scores["808s"] += tuning.AUDIO_WEIGHTS["centroid"]
+            if zcr_mean < tuning.FEATURE_THRESHOLDS["zcr_tonal_max"]:
+                scores["808s"] += tuning.AUDIO_WEIGHTS["zcr"]
 
         # Kicks
-        if duration < FEATURE_THRESHOLDS["kick_duration_max"]:
-            scores["Kicks"] += AUDIO_WEIGHTS["duration"]
-        if transient > FEATURE_THRESHOLDS["transient_kick_min"]:
-            scores["Kicks"] += AUDIO_WEIGHTS["transient"]
-        if centroid_early > FEATURE_THRESHOLDS["centroid_bright"]:
-            scores["Kicks"] += AUDIO_WEIGHTS["centroid"]
-        if voiced_ratio < 0.25:
-            scores["Kicks"] += AUDIO_WEIGHTS["zcr"] * 0.5
-        if duration < FEATURE_THRESHOLDS["kick_duration_max"] and transient > FEATURE_THRESHOLDS["transient_kick_min"]:
-            scores["Kicks"] += AUDIO_WEIGHTS["transient"] + AUDIO_WEIGHTS["duration"]
+        if duration < tuning.FEATURE_THRESHOLDS["kick_duration_max"]:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["duration"]
+        if transient > tuning.FEATURE_THRESHOLDS["transient_kick_min"]:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["transient"]
+        if is_kick_like and not tonal_808_like and low_ratio > tuning.FEATURE_THRESHOLDS["kick_lowfreq_min"]:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["lowfreq"]
+        if is_kick_like and not hat_like_separation and centroid_early > tuning.FEATURE_THRESHOLDS["kick_centroid_early_min"]:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["centroid"]
+        if is_kick_like and not hat_like_separation and centroid_early > tuning.FEATURE_THRESHOLDS["centroid_bright"]:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["centroid"]
+        if is_kick_like and not hat_like_separation:
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["transient"] + tuning.AUDIO_WEIGHTS["duration"]
 
         # HiHats / Cymbals
-        if centroid_mean > FEATURE_THRESHOLDS["centroid_bright"]:
-            scores["HiHats"] += AUDIO_WEIGHTS["centroid"]
-            scores["Cymbals"] += AUDIO_WEIGHTS["centroid"]
-        if low_ratio < FEATURE_THRESHOLDS["lowfreq_ratio_hat_max"]:
-            scores["HiHats"] += AUDIO_WEIGHTS["lowfreq"]
-            scores["Cymbals"] += AUDIO_WEIGHTS["lowfreq"]
-        if duration < 0.40:
-            scores["HiHats"] += AUDIO_WEIGHTS["duration"]
-            scores["Cymbals"] += AUDIO_WEIGHTS["duration"]
-        if flatness_mean > FEATURE_THRESHOLDS["flatness_high"]:
-            scores["HiHats"] += AUDIO_WEIGHTS["flatness"]
-            scores["Cymbals"] += AUDIO_WEIGHTS["flatness"]
+        if centroid_mean > tuning.FEATURE_THRESHOLDS["centroid_bright"]:
+            scores["HiHats"] += tuning.AUDIO_WEIGHTS["centroid"]
+            scores["Cymbals"] += tuning.AUDIO_WEIGHTS["centroid"]
+        if low_ratio < tuning.FEATURE_THRESHOLDS["lowfreq_ratio_hat_max"]:
+            scores["HiHats"] += tuning.AUDIO_WEIGHTS["lowfreq"]
+            scores["Cymbals"] += tuning.AUDIO_WEIGHTS["lowfreq"]
+        if duration < tuning.FEATURE_THRESHOLDS["hat_duration_max"]:
+            scores["HiHats"] += tuning.AUDIO_WEIGHTS["duration"]
+            scores["Cymbals"] += tuning.AUDIO_WEIGHTS["duration"]
+        if flatness_mean > tuning.FEATURE_THRESHOLDS["flatness_high"]:
+            scores["HiHats"] += tuning.AUDIO_WEIGHTS["flatness"]
+            scores["Cymbals"] += tuning.AUDIO_WEIGHTS["flatness"]
+        if flatness_mean > tuning.FEATURE_THRESHOLDS["flatness_high"] and zcr_mean > tuning.FEATURE_THRESHOLDS["zcr_high"]:
+            scores["HiHats"] += tuning.AUDIO_WEIGHTS["zcr"]
+            scores["Cymbals"] += tuning.AUDIO_WEIGHTS["zcr"]
 
         # Snares / Claps
-        if flatness_mean > 0.2 and zcr_mean > FEATURE_THRESHOLDS["zcr_high"]:
-            scores["Snares"] += AUDIO_WEIGHTS["flatness"]
-            scores["Claps"] += AUDIO_WEIGHTS["flatness"]
-        if transient > 2.0:
-            scores["Snares"] += AUDIO_WEIGHTS["transient"] * 0.5
-            scores["Claps"] += AUDIO_WEIGHTS["transient"] * 0.5
-        if FEATURE_THRESHOLDS["centroid_moderate_low"] <= centroid_mean <= FEATURE_THRESHOLDS["centroid_moderate_high"]:
-            scores["Snares"] += AUDIO_WEIGHTS["centroid"] * 0.5
-            scores["Claps"] += AUDIO_WEIGHTS["centroid"] * 0.5
+        snare_clap_spectral_ok = low_ratio < tuning.FEATURE_THRESHOLDS["snare_clap_lowfreq_max"]
+        if (
+            snare_clap_spectral_ok
+            and flatness_mean > tuning.FEATURE_THRESHOLDS["snare_clap_flatness_min"]
+            and zcr_mean > tuning.FEATURE_THRESHOLDS["zcr_high"]
+        ):
+            scores["Snares"] += tuning.AUDIO_WEIGHTS["flatness"]
+            scores["Claps"] += tuning.AUDIO_WEIGHTS["flatness"]
+        if (
+            snare_clap_spectral_ok
+            and transient > tuning.FEATURE_THRESHOLDS["snare_clap_transient_min"]
+            and zcr_mean > tuning.FEATURE_THRESHOLDS["zcr_tonal_max"]
+        ):
+            scores["Snares"] += tuning.AUDIO_WEIGHTS["transient"] * 0.5
+            scores["Claps"] += tuning.AUDIO_WEIGHTS["transient"] * 0.5
+        if (
+            snare_clap_spectral_ok
+            and tuning.FEATURE_THRESHOLDS["centroid_moderate_low"] <= centroid_mean <= tuning.FEATURE_THRESHOLDS["centroid_moderate_high"]
+        ):
+            scores["Snares"] += tuning.AUDIO_WEIGHTS["centroid"] * 0.5
+            scores["Claps"] += tuning.AUDIO_WEIGHTS["centroid"] * 0.5
 
         # Percs
-        if transient > 1.5 and duration < 0.5:
-            scores["Percs"] += AUDIO_WEIGHTS["transient"]
+        if (
+            transient > tuning.FEATURE_THRESHOLDS["percs_transient_min"]
+            and duration < tuning.FEATURE_THRESHOLDS["percs_duration_max"]
+            and low_ratio < tuning.FEATURE_THRESHOLDS["percs_lowfreq_max"]
+            and zcr_mean > tuning.FEATURE_THRESHOLDS["zcr_tonal_max"]
+        ):
+            scores["Percs"] += tuning.AUDIO_WEIGHTS["transient"]
 
-        # Vox (rough)
-        if voiced_ratio > 0.75 and centroid_mean < 2000:
-            scores["Vox"] += AUDIO_WEIGHTS["duration"]
+        # Vox / FX (rough)
+        if (
+            centroid_mean < tuning.FEATURE_THRESHOLDS["vox_centroid_max"]
+            and low_ratio < tuning.FEATURE_THRESHOLDS["vox_lowfreq_max"]
+            and duration > tuning.FEATURE_THRESHOLDS["fx_duration_min"]
+            and not tonal_808_like
+        ):
+            scores["Vox"] += tuning.AUDIO_WEIGHTS["duration"]
 
-        # FX (rough)
-        if flatness_mean > 0.5 and duration > 0.5:
-            scores["FX"] += AUDIO_WEIGHTS["flatness"]
+        if flatness_mean > tuning.FEATURE_THRESHOLDS["fx_flatness_min"] and duration > tuning.FEATURE_THRESHOLDS["fx_duration_min"]:
+            scores["FX"] += tuning.AUDIO_WEIGHTS["flatness"]
+
+        return scores
+
+    def _compute_pitch_scores(self, features: Dict[str, Any]) -> Dict[str, float]:
+        scores: Dict[str, float] = {bucket: 0.0 for bucket in self.BUCKET_RULES.keys()}
+
+        if not bool(features.get("pitch_available", False)):
+            return scores
+
+        duration = float(features.get("duration", 0.0) or 0.0)
+        transient = float(features.get("transient_strength", 0.0) or 0.0)
+        low_ratio = float(features.get("low_freq_ratio", 0.0) or 0.0)
+        centroid_mean = float(features.get("centroid_mean", 0.0) or 0.0)
+        zcr_mean = float(features.get("zcr_mean", 0.0) or 0.0)
+        flatness_mean = float(features.get("flatness_mean", 0.0) or 0.0)
+        voiced_ratio = float(features.get("voiced_ratio", 0.0) or 0.0)
+        median_f0 = float(features.get("median_f0", 0.0) or 0.0)
+        pitch_std = float(features.get("semitone_std", features.get("pitch_std", 0.0)) or 0.0)
+        glide_detected = bool(features.get("glide_detected", False))
+        glide_confidence = float(features.get("glide_confidence", 0.0) or 0.0)
+
+        is_kick_like = (
+            duration < tuning.FEATURE_THRESHOLDS["kick_duration_max"] and transient > tuning.FEATURE_THRESHOLDS["transient_kick_min"]
+        )
+        hat_like_separation = (
+            centroid_mean >= tuning.FEATURE_THRESHOLDS["centroid_bright"]
+            and low_ratio <= tuning.FEATURE_THRESHOLDS["lowfreq_ratio_hat_max"]
+            and flatness_mean >= tuning.FEATURE_THRESHOLDS["flatness_high"]
+            and zcr_mean >= tuning.FEATURE_THRESHOLDS["zcr_high"]
+        )
+        tonal_808_like = (
+            duration >= tuning.FEATURE_THRESHOLDS["808_duration_min"]
+            and low_ratio >= tuning.FEATURE_THRESHOLDS["lowfreq_ratio_808"]
+            and float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_min"])
+            <= median_f0
+            <= float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_max"])
+            and voiced_ratio >= float(tuning.PITCH_ANALYSIS_PARAMS["voiced_ratio_808_min"])
+        )
+
+        # 808 pitch bonuses (single bucket; do not split to Bass)
+        if not is_kick_like:
+            if float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_min"]) <= median_f0 <= float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_max"]):
+                scores["808s"] += tuning.PITCH_WEIGHTS["median_f0_low"]
+            if voiced_ratio >= float(tuning.PITCH_ANALYSIS_PARAMS["voiced_ratio_808_min"]):
+                scores["808s"] += tuning.PITCH_WEIGHTS["voiced_ratio"]
+            if glide_detected:
+                scores["808s"] += tuning.PITCH_WEIGHTS["glide_bonus"] * glide_confidence
+            if pitch_std <= float(tuning.PITCH_ANALYSIS_PARAMS["pitch_stability_std_max"]):
+                scores["808s"] += tuning.PITCH_WEIGHTS["stability_bonus"]
+
+        # Kicks prefer low voiced ratio (pitch tracker likely unvoiced)
+        if (
+            is_kick_like
+            and not hat_like_separation
+            and voiced_ratio < float(tuning.PITCH_ANALYSIS_PARAMS["kick_voiced_ratio_max"])
+        ):
+            scores["Kicks"] += tuning.AUDIO_WEIGHTS["zcr"] * 0.5
+
+        # Vox rough bonus only when pitch tracking is strongly voiced
+        if (
+            voiced_ratio > tuning.FEATURE_THRESHOLDS["vox_voiced_ratio_min"]
+            and centroid_mean < tuning.FEATURE_THRESHOLDS["vox_centroid_max"]
+            and low_ratio < tuning.FEATURE_THRESHOLDS["vox_lowfreq_max"]
+            and not tonal_808_like
+        ):
+            scores["Vox"] += tuning.AUDIO_WEIGHTS["duration"]
 
         return scores
 
@@ -734,6 +929,15 @@ class ProducerOSEngine:
             "audio_summary": {},
             "pitch_summary": {},
             "glide_summary": {},
+            "folder_scores": {},
+            "filename_scores": {},
+            "audio_scores": {},
+            "pitch_scores": {},
+            "final_scores": {},
+            "confidence_ratio": 0.0,
+            "confidence_margin": 0.0,
+            "low_confidence": False,
+            "top_candidates": [],
         }
 
         if self._should_ignore(file_path.name):
@@ -745,10 +949,11 @@ class ProducerOSEngine:
         if suffix != ".wav":
             return (None, "UNSORTED", 0.0, [], False, reason)
 
-        folder_scores = self._get_folder_hint_scores(file_path)
-        filename_scores = self._get_filename_hint_scores(file_path.name)
+        folder_scores, folder_matches = self._get_folder_hint_details(file_path)
+        filename_scores, filename_matches = self._get_filename_hint_details(file_path.name)
         features = self._extract_features(file_path)
         audio_scores = self._compute_audio_scores(features)
+        pitch_scores = self._compute_pitch_scores(features)
 
         final_scores: Dict[str, float] = {}
         for bucket in self.BUCKET_RULES.keys():
@@ -756,57 +961,167 @@ class ProducerOSEngine:
                 float(folder_scores.get(bucket, 0))
                 + float(filename_scores.get(bucket, 0))
                 + float(audio_scores.get(bucket, 0))
+                + float(pitch_scores.get(bucket, 0))
             )
 
-        positive = {b: s for b, s in final_scores.items() if s > 0}
-        if not positive:
-            reason["folder_matches"] = [(b, s) for b, s in folder_scores.items() if s > 0]
-            reason["filename_matches"] = [(b, s) for b, s in filename_scores.items() if s > 0]
-            reason["audio_summary"] = {
-                k: features.get(k)
-                for k in (
-                    "duration",
-                    "low_freq_ratio",
-                    "transient_strength",
-                    "centroid_mean",
-                    "centroid_early",
-                    "zcr_mean",
-                    "flatness_mean",
-                )
-            }
-            return (None, "UNSORTED", 0.0, [], False, reason)
-
-        sorted_scores = sorted(positive.items(), key=lambda kv: kv[1], reverse=True)
+        sorted_scores = sorted(final_scores.items(), key=lambda kv: kv[1], reverse=True)
         best_bucket, best_score = sorted_scores[0]
         top3 = sorted_scores[:3]
-        sum_top3 = sum(score for _, score in top3)
-        confidence_ratio = (best_score / sum_top3) if sum_top3 > 0 else 1.0
-        low_confidence = confidence_ratio < LOW_CONFIDENCE_THRESHOLD
+        top3_scores = [float(score) for _, score in top3]
+        while len(top3_scores) < 3:
+            top3_scores.append(0.0)
+        s1, s2, s3 = top3_scores[:3]
+        confidence_ratio = float(s1) / max(1.0, float(s1 + s2 + s3))
+        confidence_margin = float(s1 - s2)
+        low_confidence = confidence_ratio < tuning.LOW_CONFIDENCE_THRESHOLD
         category = self.CATEGORY_MAP.get(best_bucket, "Samples")
 
-        reason["folder_matches"] = [(b, s) for b, s in folder_scores.items() if s > 0]
-        reason["filename_matches"] = [(b, s) for b, s in filename_scores.items() if s > 0]
+        reason["folder_matches"] = folder_matches
+        reason["filename_matches"] = filename_matches
+        reason["folder_scores"] = {b: float(s) for b, s in folder_scores.items()}
+        reason["filename_scores"] = {b: float(s) for b, s in filename_scores.items()}
+        reason["audio_scores"] = {b: float(s) for b, s in audio_scores.items()}
+        reason["pitch_scores"] = {b: float(s) for b, s in pitch_scores.items()}
+        reason["final_scores"] = {b: float(s) for b, s in final_scores.items()}
+        reason["confidence_ratio"] = float(confidence_ratio)
+        reason["confidence_margin"] = float(confidence_margin)
+        reason["low_confidence"] = bool(low_confidence)
+        reason["top_candidates"] = [{"bucket": b, "score": float(s)} for b, s in top3]
+        reason["top_3_candidates"] = list(reason["top_candidates"])
         reason["audio_summary"] = {
+            "sample_rate": features.get("sample_rate"),
+            "num_samples": features.get("num_samples"),
+            "analysis_window": features.get("analysis_window"),
+            "analysis_hop": features.get("analysis_hop"),
             "duration": features.get("duration"),
+            "duration_seconds": features.get("duration_seconds"),
+            "rms_global": features.get("rms_global"),
+            "rms_frame_mean": features.get("rms_frame_mean"),
+            "rms_frame_max": features.get("rms_frame_max"),
             "low_freq_ratio": features.get("low_freq_ratio"),
+            "low_freq_energy_ratio": features.get("low_freq_energy_ratio"),
             "transient_strength": features.get("transient_strength"),
             "centroid_mean": features.get("centroid_mean"),
             "centroid_early": features.get("centroid_early"),
             "zcr_mean": features.get("zcr_mean"),
             "flatness_mean": features.get("flatness_mean"),
+            "threshold_checks": {
+                "duration_ge_808_min": float(features.get("duration", 0.0) or 0.0)
+                >= float(tuning.FEATURE_THRESHOLDS["808_duration_min"]),
+                "duration_le_kick_max": float(features.get("duration", 0.0) or 0.0)
+                <= float(tuning.FEATURE_THRESHOLDS["kick_duration_max"]),
+                "lowfreq_ge_808_min": float(features.get("low_freq_ratio", 0.0) or 0.0)
+                >= float(tuning.FEATURE_THRESHOLDS["lowfreq_ratio_808"]),
+                "lowfreq_le_hat_max": float(features.get("low_freq_ratio", 0.0) or 0.0)
+                <= float(tuning.FEATURE_THRESHOLDS["lowfreq_ratio_hat_max"]),
+                "centroid_ge_bright": float(features.get("centroid_mean", 0.0) or 0.0)
+                >= float(tuning.FEATURE_THRESHOLDS["centroid_bright"]),
+                "centroid_le_low": float(features.get("centroid_mean", 0.0) or 0.0)
+                <= float(tuning.FEATURE_THRESHOLDS["centroid_low"]),
+                "transient_ge_kick_min": float(features.get("transient_strength", 0.0) or 0.0)
+                >= float(tuning.FEATURE_THRESHOLDS["transient_kick_min"]),
+                "zcr_le_tonal_max": float(features.get("zcr_mean", 0.0) or 0.0)
+                <= float(tuning.FEATURE_THRESHOLDS["zcr_tonal_max"]),
+            },
         }
         reason["pitch_summary"] = {
+            "pitch_available": features.get("pitch_available"),
+            "f0_frames": features.get("f0_frames"),
+            "voiced_frames": features.get("voiced_frames"),
             "median_f0": features.get("median_f0"),
             "voiced_ratio": features.get("voiced_ratio"),
+            "semitone_std": features.get("semitone_std"),
             "pitch_std": features.get("pitch_std"),
+            "threshold_checks": {
+                "median_f0_in_808_range": float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_min"])
+                <= float(features.get("median_f0", 0.0) or 0.0)
+                <= float(tuning.PITCH_ANALYSIS_PARAMS["median_f0_808_max"]),
+                "voiced_ratio_ge_808_min": float(features.get("voiced_ratio", 0.0) or 0.0)
+                >= float(tuning.PITCH_ANALYSIS_PARAMS["voiced_ratio_808_min"]),
+                "pitch_stable": float(features.get("semitone_std", features.get("pitch_std", 0.0)) or 0.0)
+                <= float(tuning.PITCH_ANALYSIS_PARAMS["pitch_stability_std_max"]),
+            },
         }
         reason["glide_summary"] = {
             "glide_detected": features.get("glide_detected"),
             "glide_confidence": features.get("glide_confidence"),
             "glide_drop": features.get("glide_drop"),
+            "glide_drop_st": features.get("glide_drop_st", features.get("glide_drop")),
+            "glide_slope_st_per_sec": features.get("glide_slope_st_per_sec"),
+            "glide_residual_mad": features.get("glide_residual_mad"),
+            "glide_voiced_frames": features.get("glide_voiced_frames"),
+            "glide_voiced_ratio": features.get("glide_voiced_ratio"),
+            "glide_duration": features.get("glide_duration"),
+            "glide_guardrails_passed": features.get("glide_guardrails_passed"),
+            "threshold_checks": {
+                "duration_ge_min": float(features.get("glide_duration", 0.0) or 0.0)
+                >= float(tuning.GLIDE_PARAMS["duration_min"]),
+                "voiced_ratio_ge_min": float(features.get("glide_voiced_ratio", 0.0) or 0.0)
+                >= float(tuning.GLIDE_PARAMS["voiced_ratio_min"]),
+                "voiced_frames_ge_min": int(features.get("glide_voiced_frames", 0) or 0)
+                >= int(tuning.GLIDE_PARAMS["min_voiced_frames"]),
+                "drop_st_ge_min": float(features.get("glide_drop_st", features.get("glide_drop", 0.0)) or 0.0)
+                >= float(tuning.GLIDE_PARAMS["drop_st_min"]),
+                "slope_le_max": float(features.get("glide_slope_st_per_sec", 0.0) or 0.0)
+                <= float(tuning.GLIDE_PARAMS["slope_max_st_per_sec"]),
+                "mad_le_max": float(features.get("glide_residual_mad", 0.0) or 0.0)
+                <= float(tuning.GLIDE_PARAMS["mad_max"]),
+            },
         }
 
         return (best_bucket, category, float(confidence_ratio), top3, bool(low_confidence), reason)
+
+    def _format_reason_text(
+        self,
+        bucket: Optional[str],
+        confidence: float,
+        candidates: List[Tuple[str, float]],
+        low_confidence: bool,
+    ) -> str:
+        if bucket is None:
+            if candidates:
+                return "; ".join([f"{b}:{round(float(s), 2)}" for b, s in candidates])
+            return "no matches"
+
+        reason = f"best match: {bucket}, confidence={confidence:.2f}"
+        if low_confidence:
+            reason += "; low confidence"
+        if candidates:
+            reason += "; candidates: " + ", ".join([f"{b}:{round(float(s), 2)}" for b, s in candidates])
+        return reason
+
+    def _build_pack_file_entry(
+        self,
+        source: Path,
+        dest: Path,
+        bucket: Optional[str],
+        category: str,
+        confidence: float,
+        action: str,
+        reason_text: str,
+        reason_dict: Dict[str, Any],
+    ) -> PackFileEntry:
+        entry: PackFileEntry = {
+            "source": str(source),
+            "dest": str(dest),
+            "bucket": bucket or "UNSORTED",
+            "chosen_bucket": bucket or "UNSORTED",
+            "category": category,
+            "confidence": float(confidence),
+            "action": action,
+            "reason": reason_text,
+            "confidence_ratio": float(reason_dict.get("confidence_ratio", confidence) or 0.0),
+            "confidence_margin": float(reason_dict.get("confidence_margin", 0.0) or 0.0),
+            "low_confidence": bool(reason_dict.get("low_confidence", False)),
+            "top_candidates": list(reason_dict.get("top_candidates", [])),
+            "top_3_candidates": list(reason_dict.get("top_3_candidates", reason_dict.get("top_candidates", []))),
+            "folder_matches": list(reason_dict.get("folder_matches", [])),
+            "filename_matches": list(reason_dict.get("filename_matches", [])),
+            "audio_summary": dict(reason_dict.get("audio_summary", {})),
+            "pitch_summary": dict(reason_dict.get("pitch_summary", {})),
+            "glide_summary": dict(reason_dict.get("glide_summary", {})),
+        }
+        return entry
 
     # ------------------------------------------------------------------
     # Hub structure + styling (sidecar nfo placement)
@@ -916,7 +1231,7 @@ class ProducerOSEngine:
                         if file_path.suffix.lower() != ".wav":
                             continue
 
-                        bucket, category, confidence, candidates, low_confidence, _reason_dict = self._classify_file(
+                        bucket, category, confidence, candidates, low_confidence, reason_dict = self._classify_file(
                             file_path
                         )
                         rel_path = file_path.relative_to(pack_dir)
@@ -924,28 +1239,23 @@ class ProducerOSEngine:
                         if bucket is None:
                             dest_path = self.hub_dir / "UNSORTED" / pack_dir.name / rel_path
                             report["unsorted"] += 1
-                            reason = "no matches"
-                            if candidates:
-                                reason = "; ".join([f"{b}:{int(s)}" for b, s in candidates])
+                            reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
                         else:
                             display_bucket = self.bucket_service.get_display_name(bucket)
                             dest_path = self.hub_dir / category / display_bucket / pack_dir.name / rel_path
-                            reason = f"best match: {bucket}, confidence={confidence:.2f}"
-                            if low_confidence:
-                                reason += "; low confidence"
-                            if candidates:
-                                reason += "; candidates: " + ", ".join([f"{b}:{int(s)}" for b, s in candidates])
+                            reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
 
                         pack_report["files"].append(
-                            {
-                                "source": str(file_path),
-                                "dest": str(dest_path),
-                                "bucket": bucket or "UNSORTED",
-                                "category": category,
-                                "confidence": confidence,
-                                "action": "NONE",
-                                "reason": reason,
-                            }
+                            self._build_pack_file_entry(
+                                source=file_path,
+                                dest=dest_path,
+                                bucket=bucket,
+                                category=category,
+                                confidence=confidence,
+                                action="NONE",
+                                reason_text=reason,
+                                reason_dict=reason_dict,
+                            )
                         )
                         report["files_processed"] += 1
 
@@ -1023,7 +1333,7 @@ class ProducerOSEngine:
                             continue
 
                         rel_path = file_path.relative_to(pack_dir)
-                        bucket, category, confidence, candidates, low_confidence, _reason_dict = self._classify_file(
+                        bucket, category, confidence, candidates, low_confidence, reason_dict = self._classify_file(
                             file_path
                         )
 
@@ -1035,9 +1345,7 @@ class ProducerOSEngine:
                             )
                             dest_path = dest_dir / rel_path
                             report["unsorted"] += 1
-                            reason = "no matches"
-                            if candidates:
-                                reason = "; ".join([f"{b}:{int(s)}" for b, s in candidates])
+                            reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
                         else:
                             display_bucket = self.bucket_service.get_display_name(bucket)
                             if write_hub:
@@ -1046,11 +1354,7 @@ class ProducerOSEngine:
                                 pack_dest_dir = self.hub_dir / category / display_bucket / pack_dir.name
                             dest_path = pack_dest_dir / rel_path
 
-                            reason = f"best match: {bucket}, confidence={confidence:.2f}"
-                            if low_confidence:
-                                reason += "; low confidence"
-                            if candidates:
-                                reason += "; candidates: " + ", ".join([f"{b}:{int(s)}" for b, s in candidates])
+                            reason = self._format_reason_text(bucket, confidence, candidates, low_confidence)
 
                         action = "NONE"
                         if do_transfer:
@@ -1072,15 +1376,16 @@ class ProducerOSEngine:
                                 reason += f"; move/copy failed: {e}"
 
                         transfer_pack_report["files"].append(
-                            {
-                                "source": str(file_path),
-                                "dest": str(dest_path),
-                                "bucket": bucket or "UNSORTED",
-                                "category": category,
-                                "confidence": confidence,
-                                "action": action,
-                                "reason": reason,
-                            }
+                            self._build_pack_file_entry(
+                                source=file_path,
+                                dest=dest_path,
+                                bucket=bucket,
+                                category=category,
+                                confidence=confidence,
+                                action=action,
+                                reason_text=reason,
+                                reason_dict=reason_dict,
+                            )
                         )
                         report["files_processed"] += 1
 
