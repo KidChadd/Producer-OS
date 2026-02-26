@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.0 (2026-02-26)
+
+### Features
+
+- **ui**: Add bucket customization and oss project docs
+  ([`5eb5505`](https://github.com/KidChadd/Producer-OS/commit/5eb550505f3487faf6f1ff10be3f6d81f9421741))
+
+
 ## v0.3.1 (2026-02-26)
 
 ### Bug Fixes
