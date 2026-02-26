@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.7 (2026-02-26)
+
+### Bug Fixes
+
+- Resolve UI typing issues and scorecard action pin
+  ([`06887cd`](https://github.com/KidChadd/Producer-OS/commit/06887cd9edb0f4b849b6ee567bf6860be3621b18))
+
+
 ## v0.6.6 (2026-02-26)
 
 ### Bug Fixes
