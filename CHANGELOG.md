@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.1 (2026-02-26)
+
+### Bug Fixes
+
+- **ci**: Move scorecard write perms to job level
+  ([`9f82cb8`](https://github.com/KidChadd/Producer-OS/commit/9f82cb8273cc62b7cb492c886ba607c0ce5726c3))
+
+
 ## v0.4.0 (2026-02-26)
 
 ### Features
