@@ -22,15 +22,46 @@ Push-Location $repoRoot
 try {
     # Fast-fail for local runs or misconfigured CI shells before Nuitka spends time analyzing.
     $clCommand = Get-Command cl.exe -ErrorAction SilentlyContinue
-    if ($null -eq $clCommand) {
-        $hint = @(
-            "MSVC C/C++ compiler (cl.exe) was not found on PATH.",
-            "Open a Visual Studio Developer Command Prompt/PowerShell, or run VsDevCmd.bat before invoking this script.",
-            "Required Visual Studio component: Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
-        ) -join " "
-        throw $hint
+    $isGitHubActions = $false
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:GITHUB_ACTIONS)) {
+        $gha = [string]$env:GITHUB_ACTIONS
+        $isGitHubActions = $gha -eq "true" -or $gha -eq "True" -or $gha -eq "1"
     }
-    Write-Host "MSVC compiler found: $($clCommand.Source)"
+    if ($null -eq $clCommand) {
+        $vsWherePath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+        $discoveredCl = ""
+        if (-not [string]::IsNullOrWhiteSpace($vsWherePath) -and (Test-Path $vsWherePath)) {
+            try {
+                $discoveredCl = (& $vsWherePath `
+                    -products * `
+                    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+                    -latest `
+                    -find "VC\Tools\MSVC\**\bin\Hostx64\x64\cl.exe" 2>$null | Select-Object -First 1)
+            } catch {
+                $discoveredCl = ""
+            }
+        }
+
+        if ($isGitHubActions -and -not [string]::IsNullOrWhiteSpace([string]$discoveredCl)) {
+            Write-Warning "cl.exe not on PATH, but MSVC toolchain was discovered on the GitHub Actions runner via vswhere."
+            Write-Host "Discovered MSVC compiler (runner auto-discovery path): $discoveredCl"
+            Write-Host "Continuing and letting Nuitka/Scons resolve the Visual Studio environment."
+        } else {
+            $extraHint = if (-not [string]::IsNullOrWhiteSpace([string]$discoveredCl)) {
+                "A Visual Studio C++ toolchain was detected at '$discoveredCl', but the current shell is not initialized for MSVC."
+            } else {
+                "Required Visual Studio component: Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+            }
+            $hint = @(
+                "MSVC C/C++ compiler (cl.exe) was not found on PATH.",
+                "Open a Visual Studio Developer Command Prompt/PowerShell, or run VsDevCmd.bat before invoking this script.",
+                $extraHint
+            ) -join " "
+            throw $hint
+        }
+    } else {
+        Write-Host "MSVC compiler found: $($clCommand.Source)"
+    }
 
     if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
     if (Test-Path "build_gui_entry.build") { Remove-Item -Recurse -Force "build_gui_entry.build" }
