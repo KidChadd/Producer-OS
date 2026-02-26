@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "Deterministic synthetic WAV corpus for Producer-OS demos and bug reports.",
+  "generator": "scripts/generate_synthetic_corpus.py",
+  "cases": [
+    {
+      "path": "808s_hint_pack/01.wav",
+      "expected_bucket_hint": "808s",
+      "note": "Neutral low tone in 808-named folder (folder hint demo).",
+      "sample_rate": 22050
+    },
+    {
+      "path": "808s_folder_misleading/kick_short.wav",
+      "expected_bucket_hint": "Kicks",
+      "note": "Kick-like transient in misleading 808 folder (audio override demo).",
+      "sample_rate": 22050
+    },
+    {
+      "path": "808_glide_pack/808_glide_60_to_50.wav",
+      "expected_bucket_hint": "808s",
+      "note": "Deterministic downward glide useful for glide detection demos.",
+      "sample_rate": 22050
+    },
+    {
+      "path": "hihats_bright_pack/hat_bright_noise.wav",
+      "expected_bucket_hint": "HiHats",
+      "note": "Bright short noisy sample for percussive/hat classification demos.",
+      "sample_rate": 22050
+    },
+    {
+      "path": "ambiguous_pack/ambiguous_mid.wav",
+      "expected_bucket_hint": "unknown/low-confidence",
+      "note": "Intentionally ambiguous synthetic sample for low-confidence review demos.",
+      "sample_rate": 22050
+    }
+  ]
+}

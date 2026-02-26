@@ -52,9 +52,25 @@ jobs:
         run: |
           & ".github\scripts\build_windows_nuitka.ps1" -ZipOutput "ProducerOS-windows.zip"
 
+      - name: Generate signing status report
+        shell: pwsh
+        run: |
+          $exe = "dist\build_gui_entry.dist\ProducerOS.exe"
+          $statusFile = "dist\SIGNING_STATUS.txt"
+          if (!(Test-Path $exe)) { throw "Missing built EXE for signature report: $exe" }
+          $sig = Get-AuthenticodeSignature -FilePath $exe
+          $lines = @(
+            "producer_os_build_artifacts",
+            "ProducerOS.exe`t$($sig.Status)`t$($sig.SignerCertificate?.Subject ?? 'unsigned')"
+          )
+          Set-Content -Path $statusFile -Value $lines -Encoding ascii
+          Get-Content $statusFile | ForEach-Object { Write-Host $_ }
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ProducerOS-windows
-          path: ProducerOS-windows.zip
+          path: |
+            ProducerOS-windows.zip
+            dist/SIGNING_STATUS.txt
           if-no-files-found: error

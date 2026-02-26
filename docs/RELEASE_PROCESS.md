@@ -65,6 +65,8 @@ What it does:
 - builds an installer (Inno Setup)
 - optionally signs Windows artifacts (portable EXE + installer) when signing secrets are configured
 - verifies artifacts exist
+- generates and uploads `SHA256SUMS.txt` for release artifacts
+- generates and uploads `SIGNING_STATUS.txt` (signed vs unsigned transparency)
 - uploads assets to the GitHub Release
 - enables GitHub-generated release notes (`generate_release_notes: true`)
 
@@ -97,6 +99,33 @@ This workflow:
 GitHub release notes are generated automatically by the release upload step in `release.yml`.
 
 This reduces manual maintenance and ensures each release page contains patch notes.
+
+## Release Checksums (SHA256)
+
+The Windows release workflow generates a `SHA256SUMS.txt` file and uploads it to the GitHub Release alongside:
+
+- portable ZIP
+- installer EXE
+
+This lets users verify downloads independently.
+
+Example verification on Windows PowerShell:
+
+```powershell
+Get-FileHash .\ProducerOS-Setup-<version>.exe -Algorithm SHA256
+Get-FileHash .\ProducerOS-<version>-portable-win64.zip -Algorithm SHA256
+```
+
+Compare the resulting hashes with the entries in `SHA256SUMS.txt`.
+
+## Signing Transparency (`SIGNING_STATUS.txt`)
+
+The release workflow also generates `SIGNING_STATUS.txt`, which records the Authenticode signature status for:
+
+- packaged portable executable (`ProducerOS.exe`)
+- installer executable (`ProducerOS-Setup-<version>.exe`)
+
+This makes it obvious whether a release was signed or built in unsigned/placeholders mode.
 
 ## Packaged GUI Smoke Test (CI)
 
@@ -134,6 +163,7 @@ Configure these GitHub Actions secrets to enable signing:
   - build/release continues
 - Signing enabled but signing fails:
   - workflow fails
+- Release workflow publishes `SIGNING_STATUS.txt` so users can see signature state
 
 ### Local Dry Run (No Secrets)
 
@@ -150,6 +180,7 @@ To test actual signing locally, set the environment variables in your shell firs
 - Prefer the automated version flow (`version.yml`) for normal releases
 - Avoid manually creating tags unless you have a specific reason
 - If a release build fails, re-run `release.yml` (manual dispatch) for the same tag
+- Publish/check `SHA256SUMS.txt` with each release and verify local rebuilds when troubleshooting
 - Keep commit messages aligned with Conventional Commits so version bumps happen predictably
 
 ## Related Files

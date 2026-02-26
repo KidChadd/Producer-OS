@@ -72,12 +72,27 @@ Producer-OS uses these runtime config files:
 - `config.json`
 - `buckets.json`
 - `bucket_styles.json`
+- `bucket_hints.json`
 
 By default, these live in the platform config directory (for example,
 `%APPDATA%\ProducerOS` on Windows). In portable mode they are stored locally
 next to the app.
 
 Starter examples are available in `examples/`.
+
+Bucket names/colors/icons can be customized in the GUI:
+
+- `Options` -> `Bucket Customization`
+
+This updates:
+
+- `buckets.json` (display names)
+- `bucket_styles.json` (`Color`, `IconIndex`)
+
+Note:
+
+- `analyze` and `dry-run` do not write `.nfo` style files
+- run `copy`, `move`, or `repair-styles` to apply updated bucket color/icon styling
 
 ## Common CLI Usage
 
@@ -93,6 +108,9 @@ python -m producer_os gui
 
 # Verbose dry run with portable mode
 producer-os dry-run <inbox> <hub> --verbose --portable
+
+# Read-only classifier benchmark / audit report
+producer-os benchmark-classifier <inbox> <hub> --top-confusions 20
 
 # Copy while forcing overwrite of .nfo sidecars
 producer-os copy <inbox> <hub> --overwrite-nfo

@@ -19,6 +19,11 @@ Producer-OS combines multiple signals for each WAV file:
 
 The engine always selects a best bucket, even when confidence is low.
 
+Presentation customization note:
+
+- bucket display names (`buckets.json`) and bucket style colors/icons (`bucket_styles.json`) affect UI/folder styling presentation
+- they do not directly change classifier scoring
+
 ## Hint Scoring
 
 ### Parent Folder Hints
@@ -136,3 +141,7 @@ Producer-OS also supports additive user hint keywords via:
 - `bucket_hints.json`
 
 These hints extend (but do not replace) the built-in bucket keyword vocabulary and are logged in reasoning fields as `source: "user_hint"`.
+
+Related:
+
+- [`docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)

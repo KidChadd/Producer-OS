@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from producer_os.bucket_service import BucketService
 from producer_os.config_service import ConfigService
 from producer_os.engine import ProducerOSEngine
-from producer_os.styles_service import StyleService
+from producer_os.styles_service import DEFAULT_STYLE, StyleService
 from producer_os.ui.animations import slide_fade_in
 from producer_os.ui.engine_runner import EngineRunner
 from producer_os.ui.pages import HubPage, InboxPage, OptionsPage, RunPage
@@ -218,6 +218,8 @@ class ProducerOSWindow(QMainWindow):
         self.options_page.validateSchemasRequested.connect(self.validate_schemas)
         self.options_page.verifyAudioDependenciesRequested.connect(self.verify_audio_dependencies)
         self.options_page.qtPluginCheckRequested.connect(self.qt_plugin_check)
+        self.options_page.bucketCustomizationReloadRequested.connect(self.reload_bucket_customizations)
+        self.options_page.bucketCustomizationSaveRequested.connect(self.save_bucket_customizations)
 
         self.run_page.analyzeRequested.connect(lambda: self.start_engine_run("analyze"))
         self.run_page.runRequested.connect(lambda: self.start_engine_run(self.state.action))
@@ -230,6 +232,7 @@ class ProducerOSWindow(QMainWindow):
         self.run_page.set_action(self.state.action)
         self.options_page.set_developer_tools_visible(self.state.developer_tools, animate=False)
         self._refresh_troubleshooting_status()
+        self._refresh_bucket_customization_editor()
 
     # ------------------------------------------------------------------
     # Navigation
@@ -515,6 +518,143 @@ class ProducerOSWindow(QMainWindow):
         except Exception as exc:
             self.options_page.set_qt_plugin_status("check failed")
             QMessageBox.warning(self, "Qt plugin check", f"Check failed: {exc}")
+
+    def _bucket_ids_for_customization(self) -> list[str]:
+        ids: list[str] = list(ProducerOSEngine.BUCKET_RULES.keys())
+        extras = list((self.bucket_service.mapping or {}).keys())
+        extras += list((self.styles_data.get("buckets", {}) or {}).keys())
+        for bucket_id in extras:
+            if bucket_id not in ids:
+                ids.append(str(bucket_id))
+        return ids
+
+    def _refresh_bucket_customization_editor(self) -> None:
+        try:
+            bucket_ids = self._bucket_ids_for_customization()
+            bucket_names = dict(self.bucket_service.mapping or {})
+            bucket_styles = dict((self.styles_data.get("buckets", {}) or {}))
+            self.options_page.set_bucket_customizations(bucket_ids, bucket_names, bucket_styles)
+        except Exception as exc:
+            self.options_page.set_bucket_customization_status(f"Load failed: {exc}", success=False)
+
+    def reload_bucket_customizations(self) -> None:
+        try:
+            self.styles_data = self.config_service.load_styles()
+            self.style_service = StyleService(self.styles_data)
+            buckets_data = self.config_service.load_buckets()
+            self.bucket_service = BucketService(buckets_data)
+            self._refresh_bucket_customization_editor()
+            self.options_page.set_bucket_customization_status("Reloaded bucket names/colors from disk.", success=True)
+        except Exception as exc:
+            self.options_page.set_bucket_customization_status(f"Reload failed: {exc}", success=False)
+            QMessageBox.warning(self, "Bucket customization", f"Failed to reload bucket customizations: {exc}")
+
+    def _normalize_bucket_color(self, value: str) -> str:
+        text = (value or "").strip().upper()
+        if text.startswith("$") or text.startswith("#"):
+            text = text[1:]
+        if len(text) != 6 or any(ch not in "0123456789ABCDEF" for ch in text):
+            raise ValueError(f"Invalid color '{value}'. Use $RRGGBB (example: $CC0000).")
+        return f"${text}"
+
+    def _normalize_icon_index(self, value: object) -> int:
+        raw = str(value if value is not None else "").strip()
+        if not raw:
+            raise ValueError("IconIndex cannot be blank.")
+        text = raw
+        base = 10
+        if text.lower().startswith("0x"):
+            text = text[2:]
+            base = 16
+        elif text.startswith("$"):
+            text = text[1:]
+            base = 16
+        elif any(ch in "ABCDEFabcdef" for ch in text):
+            base = 16
+        elif len(text) == 4 and all(ch in "0123456789ABCDEFabcdef" for ch in text):
+            # FL Studio icon charts are often shown as 4-char hex codes (e.g. 0074, f129).
+            base = 16
+        if not text or any(ch not in "0123456789ABCDEFabcdef" for ch in text):
+            raise ValueError(
+                f"Invalid IconIndex '{raw}'. Use decimal (10) or hex (f129, 0074, 0xF129)."
+            )
+        icon_index = int(text, base)
+        if icon_index < 0:
+            raise ValueError(f"Invalid IconIndex '{raw}'. Value must be >= 0.")
+        return icon_index
+
+    def _default_category_styles(self) -> dict[str, dict[str, int | str]]:
+        # Fallbacks used only when no styles file exists yet.
+        return {
+            "Samples": {"Color": "$4863A0", "IconIndex": 10, "SortGroup": 0},
+            "Loops": {"Color": "$A849A8", "IconIndex": 20, "SortGroup": 1},
+            "MIDI": {"Color": "$3A8E3A", "IconIndex": 30, "SortGroup": 2},
+            "UNSORTED": {"Color": "$7F7F7F", "IconIndex": 0, "SortGroup": 3},
+        }
+
+    def save_bucket_customizations(self, names_obj: object, colors_obj: object, icons_obj: object) -> None:
+        try:
+            raw_names = dict(cast(dict[str, Any], names_obj or {}))
+            raw_colors = dict(cast(dict[str, Any], colors_obj or {}))
+            raw_icons = dict(cast(dict[str, Any], icons_obj or {}))
+            bucket_ids = self._bucket_ids_for_customization()
+
+            buckets_payload: dict[str, str] = {}
+            seen_display_names: dict[str, str] = {}
+            for bucket_id in bucket_ids:
+                display_name = str(raw_names.get(bucket_id, bucket_id) or "").strip()
+                if not display_name:
+                    raise ValueError(f"Display name cannot be blank for bucket '{bucket_id}'.")
+                folded = display_name.casefold()
+                prev = seen_display_names.get(folded)
+                if prev and prev != bucket_id:
+                    raise ValueError(
+                        f"Duplicate display name '{display_name}' for buckets '{prev}' and '{bucket_id}'."
+                    )
+                seen_display_names[folded] = bucket_id
+                buckets_payload[bucket_id] = display_name
+
+            styles_payload = self.config_service.load_styles()
+            if not isinstance(styles_payload, dict):
+                styles_payload = {}
+            categories = dict(styles_payload.get("categories") or self.styles_data.get("categories") or {})
+            if not categories:
+                categories = self._default_category_styles()
+            style_buckets = dict(styles_payload.get("buckets") or self.styles_data.get("buckets") or {})
+
+            for bucket_id in bucket_ids:
+                normalized_color = self._normalize_bucket_color(str(raw_colors.get(bucket_id, "") or ""))
+                normalized_icon = self._normalize_icon_index(raw_icons.get(bucket_id, ""))
+                existing_style = dict(style_buckets.get(bucket_id) or {})
+                icon_index = normalized_icon
+                sort_group = int(existing_style.get("SortGroup", DEFAULT_STYLE.get("SortGroup", 0)) or 0)
+                style_buckets[bucket_id] = {
+                    "Color": normalized_color,
+                    "IconIndex": icon_index,
+                    "SortGroup": sort_group,
+                }
+
+            styles_payload = {"categories": categories, "buckets": style_buckets}
+
+            self.config_service.save_buckets(buckets_payload)
+            self.config_service.save_styles(styles_payload)
+
+            self.styles_data = styles_payload
+            self.style_service = StyleService(self.styles_data)
+            self.bucket_service = BucketService(buckets_payload)
+            self._refresh_bucket_customization_editor()
+            self.options_page.set_bucket_customization_status(
+                "Saved bucket names/colors. Changes apply to future runs and style writes.",
+                success=True,
+            )
+            QMessageBox.information(
+                self,
+                "Bucket customization",
+                "Bucket names and colors saved successfully.\n\nRerun analyze/copy/move to apply changes.",
+            )
+        except Exception as exc:
+            self.options_page.set_bucket_customization_status(f"Save failed: {exc}", success=False)
+            QMessageBox.warning(self, "Bucket customization", f"Failed to save bucket customizations:\n{exc}")
 
     def save_bucket_hint_from_review(self, source: str, kind: str, bucket: str, token: str) -> None:
         token = (token or "").strip().lower()

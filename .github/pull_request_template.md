@@ -41,6 +41,9 @@ Attach before/after screenshots or GIFs.
 
 - [ ] I ran `python -m pytest -q`
 - [ ] I ran `ruff check src tests`
+- [ ] I ran `python -m mypy src/producer_os` (or explained why not)
 - [ ] I updated or added tests where appropriate
 - [ ] I updated documentation if behavior changed
+- [ ] I checked for destructive behavior changes (moves/copies/deletes) and documented impact
+- [ ] I considered Windows path behavior (Unicode, long paths, duplicates, locked files) if file operations changed
 - [ ] I did not commit generated files (`dist/`, `.venv/`, `*.egg-info/`, logs)

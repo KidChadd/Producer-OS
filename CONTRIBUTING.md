@@ -7,6 +7,10 @@ help us maintain a friendly and productive community.
 
 ## Getting Started
 
+Start here for the fastest setup path:
+
+- `docs/CONTRIBUTOR_QUICKSTART.md`
+
 1. **Install dependencies**: This project uses Python >=3.11. We recommend
    creating a virtual environment and installing dependencies with pip:
 
@@ -74,6 +78,9 @@ GitHub. Include as much detail as possible to help us reproduce the problem:
 * Steps to reproduce
 * Expected vs. actual behaviour
 * Sample input files or configuration (if applicable)
+
+For questions, usage guidance, and design discussion, prefer GitHub Discussions
+(when enabled) instead of opening a bug issue.
 
 We appreciate your feedback and will do our best to respond promptly.
 

@@ -23,6 +23,7 @@ python -m producer_os gui
 - `--portable` forces portable config mode unless `portable.flag` is already present.
 - `--workers` is supported and defaults to `1`.
 - `analyze` is no-write; `dry-run` writes logs/reports but no transfers.
+- Bucket names/colors/icons are configured via `buckets.json` and `bucket_styles.json` (GUI: `Options` -> `Bucket Customization`).
 
 ## Commands
 
@@ -103,6 +104,21 @@ These commands currently return a not-implemented error:
 
 - `preview-styles`
 - `doctor`
+
+## Bucket Names, Colors, and Icons
+
+There is currently no dedicated CLI subcommand for editing bucket display names or FL Studio style icons/colors.
+
+Use one of these approaches:
+
+- GUI: `Options` -> `Bucket Customization` (recommended)
+- manually edit `buckets.json` and `bucket_styles.json`
+
+`IconIndex` accepts decimal or hex-style values in the GUI and is stored as an integer in `bucket_styles.json`.
+
+See:
+
+- [`docs/CUSTOMIZATION.md`](CUSTOMIZATION.md)
 
 ## Examples
 

@@ -31,6 +31,16 @@ It uses a shared Python engine across both a desktop GUI (PySide6) and a CLI.
 Current v2 classification is focused on `.wav` files and uses a deterministic hybrid pipeline (folder hints, filename hints, audio features, pitch/glide analysis) designed for explainability and repeatability.
 The GUI now includes a low-confidence review workflow so you can inspect and correct uncertain classifications before re-running copy/move operations.
 
+## Privacy
+
+Producer-OS is a local-first tool.
+
+- No telemetry
+- No analytics
+- No automatic cloud uploads of audio/content
+
+Network access is only needed for things like downloading releases, cloning the repo, or CI/release automation used by maintainers.
+
 ## Key Features
 
 - Deterministic hybrid WAV classification (no ML)
@@ -41,6 +51,7 @@ The GUI now includes a low-confidence review workflow so you can inspect and cor
 - Feature caching via `feature_cache.json`
 - `benchmark-classifier` command for distribution/confusion audits and tuning
 - Preview-before-apply GUI tab for safer review before `copy`/`move`
+- GUI bucket customization for display names, colors, and FL Studio `.nfo` icons
 - Built-in troubleshooting panel (logs/config/report/dependency checks)
 - Safety-first modes (`analyze`, `dry-run`, `copy`, `move`)
 - Audit trail support with `undo-last-run`
@@ -52,6 +63,25 @@ The GUI now includes a low-confidence review workflow so you can inspect and cor
 
 See [`docs/SYSTEM_REQUIREMENTS.md`](docs/SYSTEM_REQUIREMENTS.md) for runtime, hardware, and build requirements.
 
+## Support Scope
+
+Supported / primary target:
+
+- Windows release builds (portable ZIP and installer)
+- `.wav` classification workflows
+- Windows source installs (CLI/GUI) with Python `3.11+`
+
+Experimental / best-effort:
+
+- non-Windows source installs
+- non-`.wav` classification behavior
+- custom local forks that change engine safety or bucket logic
+
+See:
+
+- [`docs/SUPPORT_POLICY.md`](docs/SUPPORT_POLICY.md)
+- [`docs/COMPATIBILITY_POLICY.md`](docs/COMPATIBILITY_POLICY.md)
+
 ## Installation
 
 ### Windows Release (Recommended)
@@ -60,6 +90,7 @@ Download the latest Windows builds from [GitHub Releases](https://github.com/Kid
 
 - Portable ZIP (`ProducerOS-<version>-portable-win64.zip`)
 - Installer (`ProducerOS-Setup-<version>.exe`)
+- `SHA256SUMS.txt` (checksums for release artifact verification)
 
 Releases: [github.com/KidChadd/Producer-OS/releases](https://github.com/KidChadd/Producer-OS/releases)
 
@@ -109,6 +140,7 @@ Recommended first run:
 
 - Start with `analyze`
 - Review the `Low Confidence Review` tab
+- Optional: open `Options` -> `Bucket Customization` to adjust bucket names/colors/icons
 - Save hints/overrides, then rerun before `copy` or `move`
 
 ### Module Entry
@@ -128,20 +160,37 @@ python -m producer_os gui
 
 ![Producer-OS CLI Screenshot](assets/cli-screenshot.svg)
 
+## Customization
+
+Producer-OS supports bucket presentation customization in the GUI:
+
+- bucket display names (`buckets.json`)
+- bucket colors (`bucket_styles.json` `Color`)
+- FL Studio bucket icons (`bucket_styles.json` `IconIndex` used in `.nfo`)
+
+Use `Options` -> `Bucket Customization`, then rerun `copy`, `move`, or `repair-styles` to apply updated folder styling.
+
+See [`docs/CUSTOMIZATION.md`](docs/CUSTOMIZATION.md) for accepted color/icon formats and validation rules.
+
 ## Documentation
 
 ### Technical Docs (`docs/`)
 
 - [`docs/SYSTEM_REQUIREMENTS.md`](docs/SYSTEM_REQUIREMENTS.md) - system, runtime, and build requirements
+- [`docs/CONTRIBUTOR_QUICKSTART.md`](docs/CONTRIBUTOR_QUICKSTART.md) - fastest path for first PR setup and checks
+- [`docs/CUSTOMIZATION.md`](docs/CUSTOMIZATION.md) - customize bucket names, colors, and FL Studio `.nfo` icons
 - [`docs/README.md`](docs/README.md) - documentation index and detailed CLI mode behavior
 - [`docs/CLASSIFICATION.md`](docs/CLASSIFICATION.md) - hybrid WAV classifier, confidence, reporting, cache
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) - common setup/runtime issues and fixes
 - [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md) - versioning and release workflow details
+- [`docs/SUPPORT_POLICY.md`](docs/SUPPORT_POLICY.md) - support scope, priorities, and issue expectations
+- [`docs/COMPATIBILITY_POLICY.md`](docs/COMPATIBILITY_POLICY.md) - compatibility and deprecation policy
 - [`docs/CLI_REFERENCE.md`](docs/CLI_REFERENCE.md) - CLI commands, flags, and benchmark usage
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - engine/UI/services architecture and data flow
 
 ### Project Docs (Root)
 
+- [`ROADMAP.md`](ROADMAP.md)
 - [`RULES_AND_USAGE.md`](RULES_AND_USAGE.md)
 - [`TESTING_GUIDE.md`](TESTING_GUIDE.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
@@ -149,6 +198,13 @@ python -m producer_os gui
 - [`SECURITY.md`](SECURITY.md)
 - [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 - [`CHANGELOG.md`](CHANGELOG.md)
+
+## Community
+
+- GitHub Discussions (Q&A / ideas): [github.com/KidChadd/Producer-OS/discussions](https://github.com/KidChadd/Producer-OS/discussions)
+- Roadmap and starter issue ideas: [`ROADMAP.md`](ROADMAP.md)
+- First-time contributor setup: [`docs/CONTRIBUTOR_QUICKSTART.md`](docs/CONTRIBUTOR_QUICKSTART.md)
+- Support and compatibility policy: [`docs/SUPPORT_POLICY.md`](docs/SUPPORT_POLICY.md), [`docs/COMPATIBILITY_POLICY.md`](docs/COMPATIBILITY_POLICY.md)
 
 ## License
 

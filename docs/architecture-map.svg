@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">Producer-OS Architecture Map</title>
+  <desc id="desc">High-level flow showing GUI and CLI feeding the shared engine, config services, and output reports/caches.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7f7f2; }
+      .title { font: 700 28px 'Segoe UI', Arial, sans-serif; fill: #1f2937; }
+      .subtitle { font: 400 15px 'Segoe UI', Arial, sans-serif; fill: #4b5563; }
+      .box { rx: 16; ry: 16; stroke-width: 2; }
+      .box-title { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #111827; }
+      .box-text { font: 400 14px 'Segoe UI', Arial, sans-serif; fill: #374151; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .label { font: 600 12px 'Segoe UI', Arial, sans-serif; fill: #334155; }
+      .lane { fill: #ffffff; stroke: #d1d5db; stroke-width: 2; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#334155" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="680" />
+  <text class="title" x="40" y="48">Producer-OS Architecture Map</text>
+  <text class="subtitle" x="40" y="74">Deterministic engine shared by GUI and CLI with config services, cache/report outputs, and Windows release packaging.</text>
+
+  <rect class="lane" x="32" y="100" width="1136" height="548" />
+
+  <!-- Top row -->
+  <rect class="box" x="60" y="130" width="250" height="120" fill="#dbeafe" stroke="#60a5fa" />
+  <text class="box-title" x="84" y="165">GUI (PySide6)</text>
+  <text class="box-text" x="84" y="190">`producer_os.ui.*`</text>
+  <text class="box-text" x="84" y="212">RunPage review queue, preview,</text>
+  <text class="box-text" x="84" y="232">troubleshooting panel</text>
+
+  <rect class="box" x="340" y="130" width="250" height="120" fill="#e0f2fe" stroke="#38bdf8" />
+  <text class="box-title" x="364" y="165">CLI</text>
+  <text class="box-text" x="364" y="190">`producer_os.cli`</text>
+  <text class="box-text" x="364" y="212">Commands: analyze / dry-run /</text>
+  <text class="box-text" x="364" y="232">copy / move / benchmark</text>
+
+  <rect class="box" x="620" y="130" width="250" height="120" fill="#ede9fe" stroke="#8b5cf6" />
+  <text class="box-title" x="644" y="165">Config Services</text>
+  <text class="box-text" x="644" y="190">`config_service`, bucket/style</text>
+  <text class="box-text" x="644" y="212">JSON + schema validation</text>
+  <text class="box-text" x="644" y="232">portable vs AppData discovery</text>
+
+  <rect class="box" x="900" y="130" width="240" height="120" fill="#dcfce7" stroke="#22c55e" />
+  <text class="box-title" x="924" y="165">Input Library</text>
+  <text class="box-text" x="924" y="190">Inbox / packs / WAV files</text>
+  <text class="box-text" x="924" y="212">Sorted traversal, non-destructive</text>
+  <text class="box-text" x="924" y="232">analysis modes</text>
+
+  <!-- Center engine -->
+  <rect class="box" x="210" y="305" width="780" height="180" fill="#fff7ed" stroke="#f59e0b" />
+  <text class="box-title" x="240" y="342">ProducerOSEngine (Single Source of Truth)</text>
+  <text class="box-text" x="240" y="370">Deterministic hybrid WAV classification: folder hints + filename hints + audio features + pitch/glide</text>
+  <text class="box-text" x="240" y="395">Safety logic, idempotent runs, feature cache, reporting, copy/move execution, style repair, undo support</text>
+  <text class="box-text" x="240" y="420">Benchmark reports, low-confidence scoring, top-3 candidates, reasoning payloads</text>
+  <text class="box-text" x="240" y="445">Optional parallel feature extraction preserves deterministic manifest/report ordering</text>
+
+  <!-- Bottom row -->
+  <rect class="box" x="70" y="535" width="300" height="90" fill="#fce7f3" stroke="#ec4899" />
+  <text class="box-title" x="96" y="570">Reports / Cache</text>
+  <text class="box-text" x="96" y="594">`run_report.json`, `feature_cache.json`, `audit.csv`</text>
+
+  <rect class="box" x="410" y="535" width="360" height="90" fill="#ecfccb" stroke="#84cc16" />
+  <text class="box-title" x="436" y="570">Hub Output + Styles</text>
+  <text class="box-text" x="436" y="594">Bucket routing, `.nfo` folder styles, logs, undo trail</text>
+
+  <rect class="box" x="810" y="535" width="320" height="90" fill="#e0e7ff" stroke="#6366f1" />
+  <text class="box-title" x="836" y="570">CI / Release Packaging</text>
+  <text class="box-text" x="836" y="594">Nuitka build, smoke test, checksums, signing, releases</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M185 252 C185 285, 300 290, 360 305" />
+  <path class="arrow" d="M465 252 C465 285, 500 290, 520 305" />
+  <path class="arrow" d="M745 252 C745 285, 700 290, 680 305" />
+  <path class="arrow" d="M1020 252 C1020 290, 940 300, 900 320" />
+
+  <path class="arrow" d="M430 485 C360 520, 280 525, 220 535" />
+  <path class="arrow" d="M600 485 L600 535" />
+  <path class="arrow" d="M770 485 C840 520, 925 525, 970 535" />
+
+  <text class="label" x="858" y="300">scan/classify</text>
+  <text class="label" x="250" y="520">reasoning + cache</text>
+  <text class="label" x="612" y="520">copy/move/report</text>
+  <text class="label" x="950" y="520">packaging metadata</text>
+</svg>
+

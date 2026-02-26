@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +35,8 @@ class OptionsPage(BaseWizardPage):
     validateSchemasRequested = Signal()
     verifyAudioDependenciesRequested = Signal()
     qtPluginCheckRequested = Signal()
+    bucketCustomizationReloadRequested = Signal()
+    bucketCustomizationSaveRequested = Signal(object, object, object)
 
     def __init__(
         self,
@@ -161,6 +168,56 @@ class OptionsPage(BaseWizardPage):
         self.qt_plugin_status_label.setWordWrap(True)
         troubleshoot_card.body_layout.addWidget(self.qt_plugin_status_label)
 
+        bucket_card = self.add_card(
+            "Bucket Customization",
+            "Customize bucket folder names, colors, and FL Studio bucket icons. Changes apply to future runs and style writes.",
+        )
+        bucket_hint = QLabel(
+            "Names are saved to buckets.json. Colors/icons are saved to bucket_styles.json. "
+            "IconIndex accepts decimal (10) or hex codes (f129, 0074, 0xF129)."
+        )
+        bucket_hint.setObjectName("FieldHint")
+        bucket_hint.setWordWrap(True)
+        bucket_card.body_layout.addWidget(bucket_hint)
+
+        self.bucket_table = QTableWidget(0, 4)
+        self.bucket_table.setHorizontalHeaderLabels(["Bucket ID", "Display Name", "Color", "IconIndex"])
+        self.bucket_table.setAlternatingRowColors(True)
+        self.bucket_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.bucket_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.bucket_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.SelectedClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+        self.bucket_table.verticalHeader().setVisible(False)
+        self.bucket_table.horizontalHeader().setStretchLastSection(True)
+        self.bucket_table.setMinimumHeight(220)
+        bucket_card.body_layout.addWidget(self.bucket_table)
+
+        bucket_actions = QHBoxLayout()
+        bucket_actions.setContentsMargins(0, 0, 0, 0)
+        bucket_actions.setSpacing(8)
+        self.pick_bucket_color_btn = QPushButton("Pick color for selected row")
+        self.reload_bucket_custom_btn = QPushButton("Reload bucket customizations")
+        self.save_bucket_custom_btn = QPushButton("Save bucket customizations")
+        for btn in (self.pick_bucket_color_btn, self.reload_bucket_custom_btn, self.save_bucket_custom_btn):
+            set_widget_role(btn, "ghost")
+            bucket_actions.addWidget(btn)
+        bucket_actions.addStretch(1)
+        bucket_card.body_layout.addLayout(bucket_actions)
+
+        self.bucket_custom_status_label = QLabel("Bucket customization: not loaded yet")
+        self.bucket_custom_status_label.setObjectName("FieldHint")
+        self.bucket_custom_status_label.setWordWrap(True)
+        bucket_card.body_layout.addWidget(self.bucket_custom_status_label)
+
+        self._bucket_table_updating = False
+        self.bucket_table.itemChanged.connect(self._on_bucket_table_item_changed)
+        self.pick_bucket_color_btn.clicked.connect(self._pick_selected_bucket_color)
+        self.reload_bucket_custom_btn.clicked.connect(self.bucketCustomizationReloadRequested.emit)
+        self.save_bucket_custom_btn.clicked.connect(self._emit_bucket_customization_save)
+
     def _on_dev_tools_toggled(self, checked: bool) -> None:
         self.dev_tools_panel.set_expanded(checked, animate=True)
         self.developerToolsChanged.emit(checked)
@@ -185,3 +242,117 @@ class OptionsPage(BaseWizardPage):
 
     def set_qt_plugin_status(self, text: str) -> None:
         self.qt_plugin_status_label.setText(f"Qt plugin check: {text}")
+
+    # ------------------------------------------------------------------
+    # Bucket customization editor (names + colors)
+    def set_bucket_customizations(
+        self,
+        bucket_ids: list[str],
+        bucket_names: dict[str, str],
+        bucket_styles: dict[str, dict[str, object]],
+    ) -> None:
+        self._bucket_table_updating = True
+        try:
+            self.bucket_table.clearContents()
+            self.bucket_table.setRowCount(len(bucket_ids))
+            for row, bucket_id in enumerate(bucket_ids):
+                display_name = str((bucket_names or {}).get(bucket_id, bucket_id) or bucket_id)
+                style = dict((bucket_styles or {}).get(bucket_id) or {})
+                color_text = str(style.get("Color", "$7F7F7F") or "$7F7F7F")
+                icon_value = style.get("IconIndex", 0)
+                icon_text = str(icon_value if icon_value is not None else 0)
+
+                id_item = QTableWidgetItem(bucket_id)
+                id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.bucket_table.setItem(row, 0, id_item)
+
+                self.bucket_table.setItem(row, 1, QTableWidgetItem(display_name))
+                self.bucket_table.setItem(row, 2, QTableWidgetItem(color_text))
+                self.bucket_table.setItem(row, 3, QTableWidgetItem(icon_text))
+                self._refresh_bucket_color_cell(row)
+        finally:
+            self._bucket_table_updating = False
+
+        self.bucket_table.resizeColumnsToContents()
+        self.bucket_table.horizontalHeader().setStretchLastSection(True)
+        self.set_bucket_customization_status("Loaded bucket names/colors from current config.", success=True)
+
+    def set_bucket_customization_status(self, text: str, success: bool = True) -> None:
+        prefix = "Bucket customization: "
+        if not text.lower().startswith("bucket customization:"):
+            text = prefix + text
+        self.bucket_custom_status_label.setText(text)
+        self.bucket_custom_status_label.setProperty("statusKind", "success" if success else "warning")
+
+    def _on_bucket_table_item_changed(self, item: QTableWidgetItem) -> None:
+        if self._bucket_table_updating:
+            return
+        if item.column() == 2:
+            self._refresh_bucket_color_cell(item.row())
+
+    def _refresh_bucket_color_cell(self, row: int) -> None:
+        item = self.bucket_table.item(row, 2)
+        if item is None:
+            return
+        color = self._qcolor_from_text(item.text())
+        if color is None:
+            item.setBackground(QColor())
+            return
+        item.setBackground(color)
+
+    def _qcolor_from_text(self, value: str) -> Optional[QColor]:
+        text = (value or "").strip()
+        if not text:
+            return None
+        if text.startswith("$"):
+            text = "#" + text[1:]
+        elif not text.startswith("#"):
+            text = "#" + text
+        if len(text) != 7:
+            return None
+        color = QColor(text)
+        return color if color.isValid() else None
+
+    def _pick_selected_bucket_color(self) -> None:
+        row = self.bucket_table.currentRow()
+        if row < 0:
+            self.set_bucket_customization_status("Select a bucket row first to pick a color.", success=False)
+            return
+        current_item = self.bucket_table.item(row, 2)
+        current_color = self._qcolor_from_text(current_item.text() if current_item else "")
+        if current_color is None:
+            current_color = QColor("#7F7F7F")
+        chosen = QColorDialog.getColor(current_color, self, "Select Bucket Color")
+        if not chosen.isValid():
+            return
+        color_text = f"${chosen.name()[1:].upper()}"
+        self._bucket_table_updating = True
+        try:
+            if current_item is None:
+                current_item = QTableWidgetItem(color_text)
+                self.bucket_table.setItem(row, 2, current_item)
+            else:
+                current_item.setText(color_text)
+            self._refresh_bucket_color_cell(row)
+        finally:
+            self._bucket_table_updating = False
+        self.set_bucket_customization_status("Selected color updated. Save to persist changes.", success=True)
+
+    def _emit_bucket_customization_save(self) -> None:
+        names: dict[str, str] = {}
+        colors: dict[str, str] = {}
+        icons: dict[str, str] = {}
+        for row in range(self.bucket_table.rowCount()):
+            bucket_item = self.bucket_table.item(row, 0)
+            name_item = self.bucket_table.item(row, 1)
+            color_item = self.bucket_table.item(row, 2)
+            icon_item = self.bucket_table.item(row, 3)
+            if bucket_item is None:
+                continue
+            bucket_id = bucket_item.text().strip()
+            if not bucket_id:
+                continue
+            names[bucket_id] = (name_item.text().strip() if name_item else bucket_id) or bucket_id
+            colors[bucket_id] = (color_item.text().strip() if color_item else "").strip()
+            icons[bucket_id] = (icon_item.text().strip() if icon_item else "").strip()
+        self.bucketCustomizationSaveRequested.emit(names, colors, icons)

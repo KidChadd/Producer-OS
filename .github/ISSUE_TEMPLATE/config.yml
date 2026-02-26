@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas (GitHub Discussions)
+    url: https://github.com/KidChadd/Producer-OS/discussions
+    about: Use Discussions for Q&A, tuning guidance, and design brainstorming (enable Discussions in repo settings if this link is not active yet).
+  - name: Support and troubleshooting
+    url: https://github.com/KidChadd/Producer-OS/blob/main/SUPPORT.md
+    about: Check support and troubleshooting guidance before opening a bug.
+

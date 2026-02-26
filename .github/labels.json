@@ -1,0 +1,19 @@
+[
+  { "name": "bug", "color": "d73a4a", "description": "Something is broken" },
+  { "name": "enhancement", "color": "a2eeef", "description": "New feature or improvement" },
+  { "name": "good first issue", "color": "7057ff", "description": "Good starter issue for new contributors" },
+  { "name": "help wanted", "color": "008672", "description": "Maintainers would like community help on this" },
+  { "name": "question", "color": "d876e3", "description": "Further information is requested" },
+  { "name": "discussion", "color": "c2e0c6", "description": "Design or product discussion topic" },
+  { "name": "dependencies", "color": "0366d6", "description": "Dependency updates (pip / GitHub Actions)" },
+  { "name": "docs", "color": "0e8a16", "description": "Documentation changes" },
+  { "name": "tests", "color": "fbca04", "description": "Tests and test infrastructure" },
+  { "name": "ci", "color": "1d76db", "description": "CI/CD, workflows, release automation" },
+  { "name": "perf", "color": "f9d0c4", "description": "Performance improvements or regressions" },
+  { "name": "gui", "color": "5319e7", "description": "Desktop GUI / PySide6" },
+  { "name": "engine", "color": "006b75", "description": "Core engine / classification logic" },
+  { "name": "cli", "color": "bfdadc", "description": "CLI commands and interface" },
+  { "name": "config", "color": "bfd4f2", "description": "Config files, schemas, validation" },
+  { "name": "release", "color": "e99695", "description": "Release packaging, installers, signing" },
+  { "name": "security", "color": "b60205", "description": "Security-sensitive issue or improvement" }
+]

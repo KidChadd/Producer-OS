@@ -105,6 +105,29 @@ jobs:
           $installer = "dist\ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe"
           & ".github\scripts\sign_windows_artifacts.ps1" -Paths @($installer)
 
+      - name: Generate signing status report
+        id: signing_status
+        shell: pwsh
+        run: |
+          $portableExe = "dist\build_gui_entry.dist\ProducerOS.exe"
+          $installer = "dist\ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe"
+          $statusFile = "dist\SIGNING_STATUS.txt"
+
+          foreach ($p in @($portableExe, $installer)) {
+            if (!(Test-Path $p)) { throw "Missing artifact for signing status report: $p" }
+          }
+
+          $rows = @("producer_os_release_artifacts")
+          foreach ($p in @($portableExe, $installer)) {
+            $sig = Get-AuthenticodeSignature -FilePath $p
+            $name = Split-Path -Path $p -Leaf
+            $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { "unsigned" }
+            $rows += "$name`t$($sig.Status)`t$subject"
+          }
+          Set-Content -Path $statusFile -Value $rows -Encoding ascii
+          Get-Content $statusFile | ForEach-Object { Write-Host $_ }
+          "status_path=$statusFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Verify artifacts exist
         shell: pwsh
         run: |
@@ -112,6 +135,29 @@ jobs:
           if (!(Test-Path $portableZip)) { throw "Portable ZIP missing: $portableZip" }
           $installer = "dist\ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe"
           if (!(Test-Path $installer)) { throw "Installer missing: $installer" }
+          $statusFile = "${{ steps.signing_status.outputs.status_path }}"
+          if (!(Test-Path $statusFile)) { throw "Signing status report missing: $statusFile" }
+
+      - name: Generate SHA256 checksums
+        id: checksums
+        shell: pwsh
+        run: |
+          $portableZip = "${{ steps.portable_bundle.outputs.zip_path }}"
+          $installer = "dist\ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe"
+          $checksumFile = "dist\SHA256SUMS.txt"
+          $artifacts = @($portableZip, $installer)
+
+          $lines = foreach ($path in $artifacts) {
+            if (!(Test-Path $path)) { throw "Missing artifact for checksum generation: $path" }
+            $hash = (Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            $name = Split-Path -Path $path -Leaf
+            "$hash  $name"
+          }
+
+          Set-Content -Path $checksumFile -Value $lines -Encoding ascii
+          Write-Host "Wrote checksums to $checksumFile"
+          Get-Content $checksumFile | ForEach-Object { Write-Host $_ }
+          "checksum_path=$checksumFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
@@ -122,3 +168,5 @@ jobs:
           files: |
             ${{ steps.portable_bundle.outputs.zip_path }}
             dist/ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe
+            ${{ steps.checksums.outputs.checksum_path }}
+            ${{ steps.signing_status.outputs.status_path }}

@@ -1,0 +1,72 @@
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "README.md"
+          - "ROADMAP.md"
+          - "docs/**"
+          - "*.md"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "pytest.ini"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/scripts/**"
+
+release:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "build/installer/**"
+          - ".github/workflows/release.yml"
+          - ".github/workflows/build.yml"
+          - ".github/scripts/build_windows_nuitka.ps1"
+          - ".github/scripts/sign_windows_artifacts.ps1"
+
+gui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/producer_os/ui/**"
+          - "assets/**"
+          - "run_gui.py"
+          - "run_gui.ps1"
+
+engine:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/producer_os/engine.py"
+          - "src/producer_os/tuning.py"
+          - "src/producer_os/schemas/**"
+
+cli:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/producer_os/cli.py"
+          - "src/producer_os/__main__.py"
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/producer_os/config_service.py"
+          - "config.example.json"
+          - "examples/**"
+          - "src/producer_os/schemas/**"
+
+perf:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/profile_engine_extract.py"
+          - "benchmarks/**"
+          - ".github/workflows/performance.yml"
+          - "src/producer_os/engine.py"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - ".github/scripts/sign_windows_artifacts.ps1"
+

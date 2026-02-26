@@ -26,3 +26,8 @@ CLI tip:
 
 For general questions or suggestions, open a GitHub issue (or GitHub Discussions
 if enabled for the repository).
+
+Support scope and compatibility expectations:
+
+- `docs/SUPPORT_POLICY.md`
+- `docs/COMPATIBILITY_POLICY.md`

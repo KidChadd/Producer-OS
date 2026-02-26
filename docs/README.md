@@ -9,8 +9,12 @@ Use the documents below for implementation details, troubleshooting, and release
 
 - `docs/CLASSIFICATION.md` - Hybrid WAV classifier behavior, confidence, reporting, and caching
 - `docs/TROUBLESHOOTING.md` - Common install/runtime issues and fixes
+- `docs/CUSTOMIZATION.md` - Bucket names, colors, and FL Studio `.nfo` icon customization
 - `docs/RELEASE_PROCESS.md` - CI/versioning/release workflow details
 - `docs/SYSTEM_REQUIREMENTS.md` - Runtime, hardware, and build requirements
+- `docs/CONTRIBUTOR_QUICKSTART.md` - Fast setup and PR workflow for contributors
+- `docs/SUPPORT_POLICY.md` - What is supported vs experimental, and how to ask for help
+- `docs/COMPATIBILITY_POLICY.md` - Compatibility and deprecation expectations
 - `docs/CLI_REFERENCE.md` - CLI commands, flags, and benchmark usage
 - `docs/ARCHITECTURE.md` - Engine/UI/services architecture and data flow
 
@@ -62,6 +66,15 @@ Configuration files:
 - `config.json`
 - `buckets.json`
 - `bucket_styles.json`
+- `bucket_hints.json`
+
+Bucket presentation customization (names/colors/icons) can be edited in the GUI:
+
+- `Options` -> `Bucket Customization`
+
+See:
+
+- `docs/CUSTOMIZATION.md`
 
 Portable mode can be enabled by:
 
@@ -75,6 +88,7 @@ Starter examples are in `examples/`.
 These remain at the repository root because they are standard GitHub-facing project docs:
 
 - `CONTRIBUTING.md`
+- `ROADMAP.md`
 - `SECURITY.md`
 - `SUPPORT.md`
 - `CODE_OF_CONDUCT.md`

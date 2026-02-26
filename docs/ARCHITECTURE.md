@@ -6,6 +6,10 @@ This document describes the high-level architecture of Producer-OS and how the G
 
 Producer-OS uses a shared deterministic engine (`ProducerOSEngine`) for both the desktop GUI and the CLI.
 
+## Architecture Map
+
+![Producer-OS Architecture Map](architecture-map.svg)
+
 Primary layers:
 
 - `producer_os.engine` - core classification, routing, reporting, cache, and safety logic
@@ -29,7 +33,8 @@ Primary layers:
    - pack breakdown
    - low-confidence review queue
    - reasoning/details per file
-7. User can export the report (with optional GUI-side `manual_review` overlay)
+7. `OptionsPage` also exposes bucket customization (display names, colors, `.nfo` `IconIndex`) and troubleshooting tools
+8. User can export the report (with optional GUI-side `manual_review` overlay)
 
 ### CLI Flow
 
@@ -114,6 +119,7 @@ Files:
 
 - `config.json` - user settings
 - `bucket_styles.json` - FL Studio folder styling
+- `bucket_styles.json` stores bucket/category `Color`, `IconIndex`, and `SortGroup`
 - `buckets.json` - bucket display names
 - `bucket_hints.json` - additive filename/folder keyword hints for classifier tuning
 
@@ -128,3 +134,4 @@ See:
 
 - `docs/RELEASE_PROCESS.md`
 - `docs/TROUBLESHOOTING.md`
+- `docs/CUSTOMIZATION.md`
