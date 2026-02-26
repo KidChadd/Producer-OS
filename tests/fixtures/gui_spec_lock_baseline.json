@@ -1,0 +1,522 @@
+{
+  "engine_runner": {
+    "run_call_keywords": {},
+    "signals": [
+      "finished",
+      "logLine",
+      "progressEvent"
+    ]
+  },
+  "entry_markers": {
+    "app_icon_candidates": [
+      "app_icon.ico",
+      "app_icon.png",
+      "banner.png"
+    ],
+    "app_smoke_env_vars": [
+      "PRODUCER_OS_SMOKE_HUB",
+      "PRODUCER_OS_SMOKE_INBOX",
+      "PRODUCER_OS_SMOKE_OUT",
+      "PRODUCER_OS_SMOKE_TEST",
+      "PRODUCER_OS_SMOKE_TEST_MS",
+      "PRODUCER_OS_SMOKE_TINY_ANALYZE"
+    ],
+    "build_gui_entry_markers": {
+      "numba_disable_jit": true,
+      "producer_os_gui_main": true
+    },
+    "main_subcommands_markers": {
+      "gui": true,
+      "qt": true
+    }
+  },
+  "files": {
+    "build_gui_entry.py": {
+      "classes": [],
+      "top_level_functions": []
+    },
+    "src/producer_os/__main__.py": {
+      "classes": [],
+      "top_level_functions": [
+        "_run_cli",
+        "_run_gui",
+        "main"
+      ]
+    },
+    "src/producer_os/ui/__init__.py": {
+      "classes": [],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/animations.py": {
+      "classes": [],
+      "top_level_functions": [
+        "_supports_opacity_effects",
+        "_anim_store",
+        "_keep_animation",
+        "_opacity_effect",
+        "fade_in",
+        "slide_fade_in",
+        "pulse_opacity",
+        "stop_pulse",
+        "animate_reveal"
+      ]
+    },
+    "src/producer_os/ui/app.py": {
+      "classes": [],
+      "top_level_functions": [
+        "_load_app_icon",
+        "_run_tiny_analyze_smoke",
+        "main"
+      ]
+    },
+    "src/producer_os/ui/data/__init__.py": {
+      "classes": [],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/data/fl_icon_favorites.py": {
+      "classes": [
+        "FLIconEntry"
+      ],
+      "top_level_functions": [
+        "_entry"
+      ]
+    },
+    "src/producer_os/ui/dialogs/__init__.py": {
+      "classes": [],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/dialogs/icon_picker.py": {
+      "classes": [
+        "IconPickerDialog"
+      ],
+      "top_level_functions": [
+        "parse_icon_index"
+      ]
+    },
+    "src/producer_os/ui/engine_runner.py": {
+      "classes": [
+        "EngineRunner"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/__init__.py": {
+      "classes": [],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/base.py": {
+      "classes": [
+        "BaseWizardPage"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/hub.py": {
+      "classes": [
+        "HubPage"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/inbox.py": {
+      "classes": [
+        "InboxPage"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/options.py": {
+      "classes": [
+        "OptionsPage"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/pages/run.py": {
+      "classes": [
+        "_WaveformPreview",
+        "_BucketBadgeDelegate",
+        "_ConfidenceChipDelegate",
+        "_Top3BadgeDelegate",
+        "RunPage"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/state.py": {
+      "classes": [
+        "WizardState"
+      ],
+      "top_level_functions": []
+    },
+    "src/producer_os/ui/theme.py": {
+      "classes": [],
+      "top_level_functions": [
+        "normalize_theme_name",
+        "normalize_ui_density",
+        "normalize_accent_mode",
+        "normalize_accent_preset",
+        "normalize_accent_color",
+        "_studio_dark_tokens",
+        "_paper_light_tokens",
+        "_midnight_blue_tokens",
+        "_system_tokens",
+        "_fallback_palette",
+        "_custom_qss",
+        "_rgba",
+        "_apply_accent_override",
+        "_density_override_qss",
+        "get_theme_tokens",
+        "build_theme_preview_card_style",
+        "apply_app_theme"
+      ]
+    },
+    "src/producer_os/ui/widgets.py": {
+      "classes": [
+        "CardFrame",
+        "HeaderBlock",
+        "StatChip",
+        "StatusBadge",
+        "SegmentedControl",
+        "NoWheelComboBox",
+        "ThemePreviewCard",
+        "ToastMessage",
+        "ToastHost",
+        "StepItem",
+        "StepSidebar",
+        "AnimatedPanel"
+      ],
+      "top_level_functions": [
+        "repolish",
+        "set_widget_role"
+      ]
+    },
+    "src/producer_os/ui/window.py": {
+      "classes": [
+        "ProducerOSWindow"
+      ],
+      "top_level_functions": []
+    }
+  },
+  "pages": {
+    "bucket_table_columns": [
+      "Bucket ID",
+      "Display Name",
+      "Color",
+      "IconIndex",
+      "Preview"
+    ],
+    "card_titles": {
+      "src/producer_os/ui/pages/hub.py": [
+        "Destination Folder",
+        "Organized Folder Name",
+        "Output Structure Preview",
+        "Transfer Mode",
+        "Routing Validation"
+      ],
+      "src/producer_os/ui/pages/inbox.py": [
+        "Inbox Folder",
+        "Preview",
+        "Safety"
+      ],
+      "src/producer_os/ui/pages/options.py": [
+        "File Types",
+        "Routing & Safety",
+        "Appearance",
+        "Developer Tools",
+        "Troubleshooting",
+        "Bucket Customization"
+      ],
+      "src/producer_os/ui/pages/run.py": [
+        "Execution Controls",
+        "Results Review",
+        "Report Export"
+      ]
+    },
+    "preview_table_columns": [
+      "Pack",
+      "File",
+      "Bucket",
+      "Category",
+      "Action",
+      "Low?",
+      "Destination Preview",
+      "Source"
+    ],
+    "review_table_columns": [
+      "Pack",
+      "File",
+      "Chosen",
+      "Confidence",
+      "Margin",
+      "Top 3",
+      "Override",
+      "Hint Action"
+    ],
+    "run_connect_calls": [
+      "act.triggered.connect(lambda _checked=False, b=bucket: self._apply_override_to_rows(self._selected_rows(), b))",
+      "act.triggered.connect(lambda _checked=False, k=kind, t=token: self._apply_hint_token_to_selected(k, t))",
+      "act.triggered.connect(lambda checked=False, s=source, b=target_bucket, t=token, k=kind: self.hintSaveRequested.emit(s, k, b, t))",
+      "act.triggered.connect(lambda checked=False, s=source, b=target_bucket, t=token: self.hintSaveRequested.emit(s, 'filename', b, t))",
+      "act.triggered.connect(lambda checked=False, s=source, b=target_bucket, t=token: self.hintSaveRequested.emit(s, 'folder', b, t))",
+      "audio_player.durationChanged.connect(self._on_audio_duration_changed)",
+      "audio_player.errorOccurred.connect(self._on_audio_error)",
+      "audio_player.playbackStateChanged.connect(self._on_audio_playback_state_changed)",
+      "audio_player.positionChanged.connect(self._on_audio_position_changed)",
+      "checkbox.toggled.connect(lambda _checked: self._save_layout_prefs())",
+      "clear_filters.triggered.connect(self._clear_review_filters)",
+      "combo.currentTextChanged.connect(lambda _text: self._save_layout_prefs())",
+      "copy_path.triggered.connect(self._copy_selected_source_path)",
+      "header.sectionMoved.connect(lambda *_args: self._save_layout_prefs())",
+      "header.sectionResized.connect(lambda *_args: self._save_layout_prefs())",
+      "hint_btn.clicked.connect(lambda _=False, btn=hint_btn: self._open_hint_menu(btn))",
+      "only_bucket.triggered.connect(self._filter_to_selected_bucket)",
+      "only_pack.triggered.connect(self._filter_to_selected_pack)",
+      "open_dir.triggered.connect(self._open_selected_file_location)",
+      "override_combo.currentTextChanged.connect(lambda value, cb=override_combo: self._on_override_combo_changed(str(cb.property('source') or ''), value))",
+      "self.analyze_btn.clicked.connect(self.analyzeRequested.emit)",
+      "self.preview_bucket_filter.currentTextChanged.connect(self._apply_preview_filters)",
+      "self.preview_changed_only.toggled.connect(self._apply_preview_filters)",
+      "self.preview_low_only.toggled.connect(self._apply_preview_filters)",
+      "self.preview_pack_filter.currentTextChanged.connect(self._apply_preview_filters)",
+      "self.preview_search.textChanged.connect(self._apply_preview_filters)",
+      "self.preview_table.horizontalHeader().sortIndicatorChanged.connect(self._on_preview_sort_changed)",
+      "self.review_audio_autoplay.toggled.connect(lambda _checked: self._save_layout_prefs())",
+      "self.review_audio_play_btn.clicked.connect(self._toggle_audio_playback)",
+      "self.review_audio_stop_btn.clicked.connect(self._stop_audio_playback)",
+      "self.review_batch_hint_btn.clicked.connect(self._open_batch_hint_menu_from_button)",
+      "self.review_batch_override_btn.clicked.connect(self._open_batch_override_menu)",
+      "self.review_bucket_filter.currentTextChanged.connect(self._apply_review_filters)",
+      "self.review_clear_filters_btn.clicked.connect(self._clear_review_filters)",
+      "self.review_detail_filename_hint_btn.clicked.connect(lambda: self._open_selected_hint_menu('filename'))",
+      "self.review_detail_folder_hint_btn.clicked.connect(lambda: self._open_selected_hint_menu('folder'))",
+      "self.review_detail_override_combo.currentTextChanged.connect(self._on_detail_override_changed)",
+      "self.review_filter_selected_bucket_btn.clicked.connect(self._filter_to_selected_bucket)",
+      "self.review_filter_selected_pack_btn.clicked.connect(self._filter_to_selected_pack)",
+      "self.review_low_only.toggled.connect(self._apply_review_filters)",
+      "self.review_pack_filter.currentTextChanged.connect(self._apply_review_filters)",
+      "self.review_search.textChanged.connect(self._apply_review_filters)",
+      "self.review_splitter.splitterMoved.connect(lambda _pos, _index: self._save_layout_prefs())",
+      "self.review_table.customContextMenuRequested.connect(self._open_review_context_menu)",
+      "self.review_table.itemSelectionChanged.connect(self._update_review_details)",
+      "self.run_btn.clicked.connect(self.runRequested.emit)",
+      "self.save_report_btn.clicked.connect(self.saveReportRequested.emit)",
+      "self.tabs.currentChanged.connect(lambda _idx: self._save_layout_prefs())",
+      "widget.textChanged.connect(lambda _text: self._save_layout_prefs())"
+    ],
+    "run_tabs": [
+      "Summary",
+      "Low Confidence Review",
+      "Apply Preview"
+    ]
+  },
+  "required_files": [
+    "src/producer_os/ui/__init__.py",
+    "src/producer_os/ui/app.py",
+    "src/producer_os/ui/animations.py",
+    "src/producer_os/ui/engine_runner.py",
+    "src/producer_os/ui/state.py",
+    "src/producer_os/ui/theme.py",
+    "src/producer_os/ui/widgets.py",
+    "src/producer_os/ui/window.py",
+    "src/producer_os/ui/data/__init__.py",
+    "src/producer_os/ui/data/fl_icon_favorites.py",
+    "src/producer_os/ui/dialogs/__init__.py",
+    "src/producer_os/ui/dialogs/icon_picker.py",
+    "src/producer_os/ui/pages/__init__.py",
+    "src/producer_os/ui/pages/base.py",
+    "src/producer_os/ui/pages/hub.py",
+    "src/producer_os/ui/pages/inbox.py",
+    "src/producer_os/ui/pages/options.py",
+    "src/producer_os/ui/pages/run.py",
+    "src/producer_os/__main__.py",
+    "build_gui_entry.py"
+  ],
+  "schema_version": 1,
+  "signals_by_file": {
+    "src/producer_os/ui/engine_runner.py": {
+      "EngineRunner": [
+        "finished",
+        "logLine",
+        "progressEvent"
+      ]
+    },
+    "src/producer_os/ui/pages/hub.py": {
+      "HubPage": [
+        "browseRequested",
+        "hubPathChanged",
+        "outputFolderNameChanged",
+        "actionChanged"
+      ]
+    },
+    "src/producer_os/ui/pages/inbox.py": {
+      "InboxPage": [
+        "browseRequested",
+        "inboxPathChanged",
+        "dryRunChanged"
+      ]
+    },
+    "src/producer_os/ui/pages/options.py": {
+      "OptionsPage": [
+        "fileTypeChanged",
+        "preserveVendorChanged",
+        "loopSafetyChanged",
+        "themeChanged",
+        "uiDensityChanged",
+        "accentModeChanged",
+        "accentPresetChanged",
+        "accentColorChanged",
+        "developerToolsChanged",
+        "openConfigRequested",
+        "openLogsRequested",
+        "openLastReportRequested",
+        "validateSchemasRequested",
+        "verifyAudioDependenciesRequested",
+        "qtPluginCheckRequested",
+        "bucketCustomizationReloadRequested",
+        "bucketCustomizationSaveRequested"
+      ]
+    },
+    "src/producer_os/ui/pages/run.py": {
+      "RunPage": [
+        "analyzeRequested",
+        "runRequested",
+        "saveReportRequested",
+        "hintSaveRequested"
+      ]
+    },
+    "src/producer_os/ui/widgets.py": {
+      "SegmentedControl": [
+        "valueChanged"
+      ],
+      "StepItem": [
+        "clicked"
+      ],
+      "StepSidebar": [
+        "stepSelected"
+      ],
+      "ThemePreviewCard": [
+        "clicked"
+      ],
+      "ToastMessage": [
+        "closed"
+      ]
+    }
+  },
+  "source_markers": {
+    "options_markers": {
+      "bucket_icon_picker_present": true,
+      "bucket_table_columns_present": true,
+      "theme_preview_cards_present": true
+    },
+    "run_markers": {
+      "audio_preview_qt_multimedia": true,
+      "batch_actions_present": true,
+      "context_menu_present": true,
+      "delegates_present": true,
+      "qsettings_present": true,
+      "review_splitter_present": true,
+      "review_widget_threshold_literal": true
+    },
+    "window_markers": {
+      "header_theme_combo_uses_no_wheel": true,
+      "run_step_hides_next_button": true,
+      "step_sidebar_present": true
+    }
+  },
+  "theme": {
+    "accent_mode_choices": [
+      "theme_default",
+      "preset",
+      "custom"
+    ],
+    "accent_preset_choices": [
+      "cyan",
+      "blue",
+      "emerald",
+      "amber",
+      "rose"
+    ],
+    "accent_preset_colors": {
+      "amber": "#F6AE53",
+      "blue": "#4F8CFF",
+      "cyan": "#56C8FF",
+      "emerald": "#38D39F",
+      "rose": "#FB738F"
+    },
+    "theme_aliases": {
+      "dark": "studio_dark",
+      "light": "paper_light",
+      "midnight_blue": "midnight_blue",
+      "paper_light": "paper_light",
+      "studio_dark": "studio_dark",
+      "system": "system"
+    },
+    "theme_preset_choices": [
+      "system",
+      "studio_dark",
+      "paper_light",
+      "midnight_blue"
+    ],
+    "theme_preset_labels": {
+      "midnight_blue": "Midnight Blue",
+      "paper_light": "Paper Light",
+      "studio_dark": "Studio Dark",
+      "system": "System"
+    },
+    "ui_density_choices": [
+      "comfortable",
+      "compact"
+    ]
+  },
+  "window": {
+    "step_defs": [
+      [
+        "Inbox",
+        "Choose the source folder"
+      ],
+      [
+        "Hub",
+        "Choose destination and transfer mode"
+      ],
+      [
+        "Options",
+        "Configure safety and appearance"
+      ],
+      [
+        "Run",
+        "Analyze, execute, and review"
+      ]
+    ],
+    "wire_signals_connect_calls": [
+      "self.header_open_config_btn.clicked.connect(self.open_config_folder)",
+      "self.header_open_report_btn.clicked.connect(self.open_last_report)",
+      "self.header_theme_combo.currentIndexChanged.connect(lambda _idx: self.on_theme_changed(str(self.header_theme_combo.currentData() or 'system')))",
+      "self.hub_page.actionChanged.connect(self.on_action_changed)",
+      "self.hub_page.browseRequested.connect(self.browse_hub)",
+      "self.hub_page.hubPathChanged.connect(self.on_hub_path_changed)",
+      "self.hub_page.outputFolderNameChanged.connect(self.on_output_folder_name_changed)",
+      "self.inbox_page.browseRequested.connect(self.browse_inbox)",
+      "self.inbox_page.dryRunChanged.connect(self.on_dry_run_changed)",
+      "self.inbox_page.inboxPathChanged.connect(self.on_inbox_path_changed)",
+      "self.next_btn.clicked.connect(self.go_next)",
+      "self.options_page.accentColorChanged.connect(self.on_accent_color_changed)",
+      "self.options_page.accentModeChanged.connect(self.on_accent_mode_changed)",
+      "self.options_page.accentPresetChanged.connect(self.on_accent_preset_changed)",
+      "self.options_page.bucketCustomizationReloadRequested.connect(self.reload_bucket_customizations)",
+      "self.options_page.bucketCustomizationSaveRequested.connect(self.save_bucket_customizations)",
+      "self.options_page.developerToolsChanged.connect(self.on_dev_tools_changed)",
+      "self.options_page.fileTypeChanged.connect(self.on_file_type_changed)",
+      "self.options_page.loopSafetyChanged.connect(self.on_loop_safety_changed)",
+      "self.options_page.openConfigRequested.connect(self.open_config_folder)",
+      "self.options_page.openLastReportRequested.connect(self.open_last_report)",
+      "self.options_page.openLogsRequested.connect(self.open_logs_folder)",
+      "self.options_page.preserveVendorChanged.connect(self.on_preserve_vendor_changed)",
+      "self.options_page.qtPluginCheckRequested.connect(self.qt_plugin_check)",
+      "self.options_page.themeChanged.connect(self.on_theme_changed)",
+      "self.options_page.uiDensityChanged.connect(self.on_ui_density_changed)",
+      "self.options_page.validateSchemasRequested.connect(self.validate_schemas)",
+      "self.options_page.verifyAudioDependenciesRequested.connect(self.verify_audio_dependencies)",
+      "self.prev_btn.clicked.connect(self.go_previous)",
+      "self.run_page.analyzeRequested.connect(lambda: self.start_engine_run('analyze'))",
+      "self.run_page.hintSaveRequested.connect(self.save_bucket_hint_from_review)",
+      "self.run_page.runRequested.connect(lambda: self.start_engine_run(self.state.action))",
+      "self.run_page.saveReportRequested.connect(self.save_run_report)",
+      "self.step_sidebar.stepSelected.connect(self._on_step_sidebar_selected)"
+    ]
+  }
+}
