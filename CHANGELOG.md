@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.2 (2026-02-26)
+
+### Bug Fixes
+
+- **types**: Narrow audio preview init for mypy
+  ([`06d1e2a`](https://github.com/KidChadd/Producer-OS/commit/06d1e2a35b4552d6ca7502b8be78f34d15801cdc))
+
+
 ## v0.6.1 (2026-02-26)
 
 ### Bug Fixes
