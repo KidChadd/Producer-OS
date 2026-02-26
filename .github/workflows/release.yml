@@ -4,9 +4,19 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to build (e.g. v0.1.2)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-windows-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -21,10 +31,27 @@ jobs:
       - name: Extract version from tag
         shell: pwsh
         run: |
-          $tag = "${env:GITHUB_REF_NAME}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ github.event.inputs.tag }}"
+          } else {
+            $tag = "${env:GITHUB_REF_NAME}"
+          }
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "No tag provided."
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid tag format: $tag (expected vMAJOR.MINOR.PATCH)"
+          }
           $ver = $tag.TrimStart("v")
           "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Checkout selected tag (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git fetch --tags --force
+          git checkout "refs/tags/${env:TAG}"
 
       - name: Setup Python
         uses: actions/setup-python@v5
