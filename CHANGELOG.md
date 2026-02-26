@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.4.2 (2026-02-26)
+
+### Bug Fixes
+
+- **gui**: Stabilize review filters and improve local run UX
+  ([`f6779f9`](https://github.com/KidChadd/Producer-OS/commit/f6779f9f31955bed401e5d3663a551915009db0c))
+
+### Performance Improvements
+
+- **ci**: Exclude upstream test trees from nuitka build
+  ([`998b31f`](https://github.com/KidChadd/Producer-OS/commit/998b31f1b664e9c1ffd938da640516e13e8e528c))
+
+
 ## v0.4.1 (2026-02-26)
 
 ### Bug Fixes
