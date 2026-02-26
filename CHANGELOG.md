@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.4.3 (2026-02-26)
+
+### Performance Improvements
+
+- **ci**: Trim nuitka graph and record build timings
+  ([`30d4655`](https://github.com/KidChadd/Producer-OS/commit/30d4655e4f08585d639a37bf2a72544f228d0e2f))
+
+
 ## v0.4.2 (2026-02-26)
 
 ### Bug Fixes
