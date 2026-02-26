@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.1.2 (2026-02-26)
+
+### Bug Fixes
+
+- **ci**: Bundle Qt platform plugin in windows builds
+  ([`833f1b3`](https://github.com/KidChadd/Producer-OS/commit/833f1b374b1390907562f25c66bda1d624ed6823))
+
+
 ## v0.1.0 (2026-02-25)
 
 - Initial Release
