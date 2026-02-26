@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.6.4 (2026-02-26)
+
+### Bug Fixes
+
+- **ci**: Allow msvc auto-discovery on github runners
+  ([`a354f00`](https://github.com/KidChadd/Producer-OS/commit/a354f001bf3430334fbdff9504da7fd0681958e5))
+
+
 ## v0.6.3 (2026-02-26)
 
 ### Bug Fixes
