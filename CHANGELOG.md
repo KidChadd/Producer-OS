@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.3.0 (2026-02-26)
+
+### Features
+
+- Add review workflow benchmark and release hardening
+  ([`01a90bb`](https://github.com/KidChadd/Producer-OS/commit/01a90bbfcfef3dc320a1f1210f1762ad121a5746))
+
+
 ## v0.2.0 (2026-02-26)
 
 ### Features
