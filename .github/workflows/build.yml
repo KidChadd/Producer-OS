@@ -2,6 +2,19 @@ name: Build (Windows EXE)
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build (branch, tag, or SHA). Defaults to current branch."
+        required: false
+        type: string
+      build_profile:
+        description: "Nuitka build profile"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - release
 
 concurrency:
   group: build-windows-${{ github.ref }}
@@ -21,10 +34,12 @@ env:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -41,6 +56,14 @@ jobs:
           python -m pip install --no-cache-dir nuitka==2.8.10
           python -m nuitka --version
 
+      - name: Print build context
+        shell: pwsh
+        run: |
+          Write-Host "Workflow ref input: '${{ inputs.ref }}'"
+          Write-Host "Build profile: '${{ inputs.build_profile }}'"
+          Write-Host "Checked out commit: $(git rev-parse HEAD)"
+          Write-Host "Checked out ref: $(git describe --tags --always --dirty)"
+
       - name: Lint
         run: ruff check src tests
 
@@ -50,7 +73,10 @@ jobs:
       - name: Build EXE (Nuitka standalone)
         shell: pwsh
         run: |
-          & ".github\scripts\build_windows_nuitka.ps1" -ZipOutput "ProducerOS-windows.zip"
+          & ".github\scripts\build_windows_nuitka.ps1" `
+            -BuildProfile "${{ inputs.build_profile }}" `
+            -BuildInfoOutput "dist\BUILD_INFO.txt" `
+            -ZipOutput "ProducerOS-windows.zip"
 
       - name: Generate signing status report
         shell: pwsh
@@ -73,4 +99,5 @@ jobs:
           path: |
             ProducerOS-windows.zip
             dist/SIGNING_STATUS.txt
+            dist/BUILD_INFO.txt
           if-no-files-found: error

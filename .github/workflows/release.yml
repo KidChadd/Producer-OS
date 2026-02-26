@@ -29,7 +29,7 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
 
     steps:
       - name: Checkout
@@ -63,6 +63,14 @@ jobs:
           git fetch --tags --force
           git checkout "refs/tags/${{ steps.release_meta.outputs.tag }}"
 
+      - name: Overlay latest CI build scripts (manual rebuild drift fix)
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git fetch origin main --depth=1
+          git checkout origin/main -- .github/scripts/build_windows_nuitka.ps1 .github/scripts/sign_windows_artifacts.ps1
+          Write-Host "Using CI build scripts from origin/main for manual tag rebuild."
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -79,6 +87,17 @@ jobs:
           python -m pip install --no-cache-dir nuitka==2.8.10
           python -m nuitka --version
 
+      - name: Print release build context
+        shell: pwsh
+        run: |
+          Write-Host "Event: ${{ github.event_name }}"
+          Write-Host "Release tag: ${{ steps.release_meta.outputs.tag }}"
+          Write-Host "Workflow ref: ${{ github.workflow_ref }}"
+          Write-Host "Checked out commit: $(git rev-parse HEAD)"
+          Write-Host "Checked out ref: $(git describe --tags --always --dirty)"
+          $ciScriptHead = (git log -1 --format=%H -- .github/scripts/build_windows_nuitka.ps1)
+          Write-Host "CI build script blob source commit (workspace): $ciScriptHead"
+
       - name: Ruff + Tests
         shell: pwsh
         run: |
@@ -90,7 +109,10 @@ jobs:
         shell: pwsh
         run: |
           $zip = "ProducerOS-${{ steps.release_meta.outputs.version }}-portable-win64.zip"
-          & ".github\scripts\build_windows_nuitka.ps1" -ZipOutput $zip
+          & ".github\scripts\build_windows_nuitka.ps1" `
+            -BuildProfile release `
+            -BuildInfoOutput "dist\BUILD_INFO.txt" `
+            -ZipOutput $zip
           "zip_path=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Build installer
@@ -137,6 +159,7 @@ jobs:
           if (!(Test-Path $installer)) { throw "Installer missing: $installer" }
           $statusFile = "${{ steps.signing_status.outputs.status_path }}"
           if (!(Test-Path $statusFile)) { throw "Signing status report missing: $statusFile" }
+          if (!(Test-Path "dist\BUILD_INFO.txt")) { throw "Build info report missing: dist\BUILD_INFO.txt" }
 
       - name: Generate SHA256 checksums
         id: checksums
@@ -170,3 +193,4 @@ jobs:
             dist/ProducerOS-Setup-${{ steps.release_meta.outputs.version }}.exe
             ${{ steps.checksums.outputs.checksum_path }}
             ${{ steps.signing_status.outputs.status_path }}
+            dist/BUILD_INFO.txt
