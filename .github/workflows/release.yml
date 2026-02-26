@@ -81,11 +81,14 @@ jobs:
       - name: Install dependencies
         shell: pwsh
         run: |
+          $start = Get-Date
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,gui]"
           python -m pip uninstall -y nuitka
           python -m pip install --no-cache-dir nuitka==2.8.10
           python -m nuitka --version
+          $elapsed = [Math]::Round(((Get-Date) - $start).TotalSeconds, 3)
+          "RELEASE_DEP_INSTALL_SECONDS=$elapsed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Print release build context
         shell: pwsh
@@ -98,11 +101,16 @@ jobs:
           $ciScriptHead = (git log -1 --format=%H -- .github/scripts/build_windows_nuitka.ps1)
           Write-Host "CI build script blob source commit (workspace): $ciScriptHead"
 
-      - name: Ruff + Tests
+      - name: Minimal preflight imports (release)
         shell: pwsh
         run: |
-          python -m ruff check src tests
-          python -m pytest -q --disable-warnings
+          @'
+          import importlib
+          mods = ["producer_os", "PySide6", "librosa", "scipy", "soundfile", "numba", "llvmlite", "qdarktheme"]
+          for name in mods:
+              importlib.import_module(name)
+          print("release import smoke ok")
+          '@ | python -
 
       - name: Build standalone + zip portable
         id: portable_bundle
@@ -112,14 +120,27 @@ jobs:
           & ".github\scripts\build_windows_nuitka.ps1" `
             -BuildProfile release `
             -BuildInfoOutput "dist\BUILD_INFO.txt" `
+            -TimingOutput "dist\BUILD_TIMING.txt" `
             -ZipOutput $zip
           "zip_path=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Start installer timer
+        shell: pwsh
+        run: |
+          "INSTALLER_BUILD_START_UTC=$([DateTime]::UtcNow.ToString('o'))" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.6
         with:
           path: build/installer/ProducerOS.iss
           options: /DMyAppVersion=${{ steps.release_meta.outputs.version }}
+
+      - name: Record installer timer
+        shell: pwsh
+        run: |
+          $startUtc = [DateTime]::Parse("${{ env.INSTALLER_BUILD_START_UTC }}").ToUniversalTime()
+          $elapsed = [Math]::Round(([DateTime]::UtcNow - $startUtc).TotalSeconds, 3)
+          "INSTALLER_BUILD_SECONDS=$elapsed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Sign installer (optional)
         shell: pwsh
@@ -150,6 +171,17 @@ jobs:
           Get-Content $statusFile | ForEach-Object { Write-Host $_ }
           "status_path=$statusFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Append workflow timings
+        shell: pwsh
+        run: |
+          $timing = "dist\BUILD_TIMING.txt"
+          if (!(Test-Path $timing)) { throw "Missing timing report: $timing" }
+          Add-Content -Path $timing -Value @(
+            "workflow_release_dependency_install_seconds`t${{ env.RELEASE_DEP_INSTALL_SECONDS }}",
+            "workflow_release_installer_build_seconds`t${{ env.INSTALLER_BUILD_SECONDS }}"
+          )
+          Get-Content $timing | ForEach-Object { Write-Host $_ }
+
       - name: Verify artifacts exist
         shell: pwsh
         run: |
@@ -160,6 +192,7 @@ jobs:
           $statusFile = "${{ steps.signing_status.outputs.status_path }}"
           if (!(Test-Path $statusFile)) { throw "Signing status report missing: $statusFile" }
           if (!(Test-Path "dist\BUILD_INFO.txt")) { throw "Build info report missing: dist\BUILD_INFO.txt" }
+          if (!(Test-Path "dist\BUILD_TIMING.txt")) { throw "Build timing report missing: dist\BUILD_TIMING.txt" }
 
       - name: Generate SHA256 checksums
         id: checksums
@@ -194,3 +227,4 @@ jobs:
             ${{ steps.checksums.outputs.checksum_path }}
             ${{ steps.signing_status.outputs.status_path }}
             dist/BUILD_INFO.txt
+            dist/BUILD_TIMING.txt

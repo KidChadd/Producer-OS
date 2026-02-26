@@ -4,7 +4,9 @@ param(
     [ValidateSet("dev", "release")]
     [string]$BuildProfile = "release",
     [string]$RepoRoot = "",
-    [string]$BuildInfoOutput = ""
+    [string]$BuildInfoOutput = "",
+    [string]$TimingOutput = "",
+    [int]$NuitkaJobs = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,6 +48,10 @@ try {
         "--nofollow-import-to=llvmlite.tests",
         "--nofollow-import-to=scipy.tests",
         "--nofollow-import-to=sklearn.tests",
+        "--nofollow-import-to=librosa.tests",
+        "--nofollow-import-to=qdarktheme.tests",
+        "--nofollow-import-to=packaging.tests",
+        "--nofollow-import-to=numpy.tests",
         "--nofollow-import-to=joblib.test",
         "--nofollow-import-to=joblib.testing"
     )
@@ -60,6 +66,9 @@ try {
         "dev" {
             # Faster local/CI dev builds: omit explicit sklearn/joblib force-includes.
             # Smoke tests still validate packaged startup, but runtime coverage is narrower.
+            $nuitkaArgs += @(
+                "--nofollow-import-to=sklearn.externals._numpydoc"
+            )
         }
         default {
             throw "Unsupported BuildProfile: $BuildProfile"
@@ -68,6 +77,21 @@ try {
     if (Test-Path "assets\app_icon.ico") {
         $nuitkaArgs += "--windows-icon-from-ico=assets/app_icon.ico"
     }
+
+    $resolvedNuitkaJobs = 0
+    if ($NuitkaJobs -gt 0) {
+        $resolvedNuitkaJobs = $NuitkaJobs
+    }
+    elseif ($env:NUMBER_OF_PROCESSORS) {
+        $parsedJobs = 0
+        if ([int]::TryParse($env:NUMBER_OF_PROCESSORS, [ref]$parsedJobs)) {
+            $resolvedNuitkaJobs = [Math]::Max(1, $parsedJobs)
+        }
+    }
+    if ($resolvedNuitkaJobs -gt 0) {
+        $nuitkaArgs += "--jobs=$resolvedNuitkaJobs"
+    }
+
     $nuitkaArgs += "build_gui_entry.py"
 
     $gitSha = ""
@@ -81,6 +105,7 @@ try {
     if ($gitRef) { Write-Host "Source ref: $gitRef" }
     Write-Host "Build script source: $scriptSource"
     Write-Host "Repo root: $repoRoot"
+    if ($resolvedNuitkaJobs -gt 0) { Write-Host "Nuitka parallel jobs: $resolvedNuitkaJobs" }
     Write-Host "Nuitka args count: $($nuitkaArgs.Count)"
 
     if (-not [string]::IsNullOrWhiteSpace($BuildInfoOutput)) {
@@ -107,7 +132,78 @@ try {
         Write-Host "Wrote build info: $buildInfoPath"
     }
 
-    python -m nuitka @nuitkaArgs
+    $resolvedTimingPath = $null
+    if (-not [string]::IsNullOrWhiteSpace($TimingOutput)) {
+        $resolvedTimingPath = if ([System.IO.Path]::IsPathRooted($TimingOutput)) {
+            $TimingOutput
+        } else {
+            Join-Path $repoRoot $TimingOutput
+        }
+        $timingDir = Split-Path -Parent $resolvedTimingPath
+        if ($timingDir -and -not (Test-Path $timingDir)) {
+            New-Item -ItemType Directory -Force -Path $timingDir | Out-Null
+        }
+    }
+
+    $nuitkaStartUtc = [DateTime]::UtcNow
+    $markerTimes = @{}
+    python -m nuitka @nuitkaArgs 2>&1 | ForEach-Object {
+        $line = "$_"
+        Write-Host $line
+        $nowUtc = [DateTime]::UtcNow
+
+        if (-not $markerTimes.ContainsKey("python_compile_done") -and $line -like "*Completed Python level compilation and optimization.*") {
+            $markerTimes["python_compile_done"] = $nowUtc
+        }
+        if (-not $markerTimes.ContainsKey("data_composer_start") -and $line -like "*Running data composer tool*") {
+            $markerTimes["data_composer_start"] = $nowUtc
+        }
+        if (-not $markerTimes.ContainsKey("c_compile_start") -and $line -like "*Running C compilation via Scons.*") {
+            $markerTimes["c_compile_start"] = $nowUtc
+        }
+        if (-not $markerTimes.ContainsKey("c_backend_seen") -and $line -like "*Nuitka-Scons: Backend C compiler:*") {
+            $markerTimes["c_backend_seen"] = $nowUtc
+        }
+    }
+    $nuitkaExitCode = $LASTEXITCODE
+    $nuitkaEndUtc = [DateTime]::UtcNow
+    if ($nuitkaExitCode -ne 0) {
+        throw "Nuitka failed with exit code $nuitkaExitCode"
+    }
+
+    if ($resolvedTimingPath) {
+        $seconds = {
+            param([DateTime]$a, [DateTime]$b)
+            [Math]::Round(($b - $a).TotalSeconds, 3)
+        }
+
+        $timingLines = @(
+            "producer_os_nuitka_timing",
+            "profile`t$BuildProfile",
+            "git_sha`t$gitSha",
+            "git_ref`t$gitRef",
+            "nuitka_jobs`t$resolvedNuitkaJobs",
+            "nuitka_total_seconds`t$(& $seconds $nuitkaStartUtc $nuitkaEndUtc)",
+            "python_compile_done_seen`t$($markerTimes.ContainsKey('python_compile_done'))",
+            "c_compile_start_seen`t$($markerTimes.ContainsKey('c_compile_start'))"
+        )
+        if ($markerTimes.ContainsKey("python_compile_done")) {
+            $timingLines += "python_level_compile_seconds`t$(& $seconds $nuitkaStartUtc $markerTimes['python_compile_done'])"
+        }
+        if ($markerTimes.ContainsKey("data_composer_start")) {
+            $timingLines += "data_composer_start_after_seconds`t$(& $seconds $nuitkaStartUtc $markerTimes['data_composer_start'])"
+        }
+        if ($markerTimes.ContainsKey("c_compile_start")) {
+            $timingLines += "c_compile_start_after_seconds`t$(& $seconds $nuitkaStartUtc $markerTimes['c_compile_start'])"
+            $timingLines += "scons_c_compile_and_link_seconds`t$(& $seconds $markerTimes['c_compile_start'] $nuitkaEndUtc)"
+        }
+        if ($markerTimes.ContainsKey("python_compile_done") -and $markerTimes.ContainsKey("c_compile_start")) {
+            $timingLines += "between_python_done_and_c_compile_start_seconds`t$(& $seconds $markerTimes['python_compile_done'] $markerTimes['c_compile_start'])"
+        }
+        Set-Content -Path $resolvedTimingPath -Value $timingLines -Encoding ascii
+        Write-Host "Wrote Nuitka timing: $resolvedTimingPath"
+        Get-Content $resolvedTimingPath | ForEach-Object { Write-Host $_ }
+    }
 
     $distBundle = "dist\build_gui_entry.dist"
     $qwindows = Get-ChildItem -Path $distBundle -Recurse -Filter "qwindows.dll" -ErrorAction SilentlyContinue |

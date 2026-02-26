@@ -50,11 +50,14 @@ jobs:
       - name: Install deps
         shell: pwsh
         run: |
+          $start = Get-Date
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,gui]"
           python -m pip uninstall -y nuitka
           python -m pip install --no-cache-dir nuitka==2.8.10
           python -m nuitka --version
+          $elapsed = [Math]::Round(((Get-Date) - $start).TotalSeconds, 3)
+          "BUILD_DEP_INSTALL_SECONDS=$elapsed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Print build context
         shell: pwsh
@@ -76,7 +79,18 @@ jobs:
           & ".github\scripts\build_windows_nuitka.ps1" `
             -BuildProfile "${{ inputs.build_profile }}" `
             -BuildInfoOutput "dist\BUILD_INFO.txt" `
+            -TimingOutput "dist\BUILD_TIMING.txt" `
             -ZipOutput "ProducerOS-windows.zip"
+
+      - name: Append workflow timings
+        shell: pwsh
+        run: |
+          $timing = "dist\BUILD_TIMING.txt"
+          if (!(Test-Path $timing)) { throw "Missing timing report: $timing" }
+          Add-Content -Path $timing -Value @(
+            "workflow_build_dependency_install_seconds`t${{ env.BUILD_DEP_INSTALL_SECONDS }}"
+          )
+          Get-Content $timing | ForEach-Object { Write-Host $_ }
 
       - name: Generate signing status report
         shell: pwsh
@@ -100,4 +114,5 @@ jobs:
             ProducerOS-windows.zip
             dist/SIGNING_STATUS.txt
             dist/BUILD_INFO.txt
+            dist/BUILD_TIMING.txt
           if-no-files-found: error
