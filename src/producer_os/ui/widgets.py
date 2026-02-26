@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
-from PySide6.QtCore import QRect, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QEvent, QObject, QRect, QSignalBlocker, Qt, QTimer, Signal
+from PySide6.QtGui import QMouseEvent, QWheelEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSizePolicy,
     QSpacerItem,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -37,24 +39,34 @@ class CardFrame(QFrame):
         super().__init__(parent)
         self.setObjectName("CardFrame")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
         self.layout_root = layout
 
+        self._title_label: Optional[QLabel] = None
+        self._subtitle_label: Optional[QLabel] = None
         if title:
             title_label = QLabel(title)
             title_label.setObjectName("SectionTitle")
+            self._title_label = title_label
             layout.addWidget(title_label)
         if subtitle:
             subtitle_label = QLabel(subtitle)
             subtitle_label.setObjectName("FieldHint")
             subtitle_label.setWordWrap(True)
+            self._subtitle_label = subtitle_label
             layout.addWidget(subtitle_label)
 
         self.body_layout = QVBoxLayout()
         self.body_layout.setContentsMargins(0, 0, 0, 0)
-        self.body_layout.setSpacing(10)
+        self.body_layout.setSpacing(12)
         layout.addLayout(self.body_layout)
+
+    def apply_density(self, density: str) -> None:
+        compact = str(density).strip().lower() == "compact"
+        self.layout_root.setContentsMargins(14 if compact else 18, 12 if compact else 16, 14 if compact else 18, 12 if compact else 16)
+        self.layout_root.setSpacing(8 if compact else 12)
+        self.body_layout.setSpacing(8 if compact else 12)
 
 
 class HeaderBlock(QWidget):
@@ -62,7 +74,7 @@ class HeaderBlock(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("PageTitle")
@@ -72,6 +84,11 @@ class HeaderBlock(QWidget):
         self.subtitle_label.setObjectName("PageSubtitle")
         self.subtitle_label.setWordWrap(True)
         layout.addWidget(self.subtitle_label)
+        self._layout = layout
+
+    def apply_density(self, density: str) -> None:
+        compact = str(density).strip().lower() == "compact"
+        self._layout.setSpacing(4 if compact else 6)
 
 
 class StatChip(QFrame):
@@ -79,8 +96,8 @@ class StatChip(QFrame):
         super().__init__(parent)
         self.setObjectName("StatChip")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(2)
+        layout.setContentsMargins(14, 12, 14, 10)
+        layout.setSpacing(3)
         self.value_label = QLabel(value)
         self.value_label.setObjectName("StatValue")
         self.label_label = QLabel(label)
@@ -91,6 +108,11 @@ class StatChip(QFrame):
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
+
+    def apply_density(self, density: str) -> None:
+        compact = str(density).strip().lower() == "compact"
+        self.layout().setContentsMargins(10 if compact else 14, 8 if compact else 12, 10 if compact else 14, 7 if compact else 10)
+        self.layout().setSpacing(2 if compact else 3)
 
 
 class StatusBadge(QLabel):
@@ -145,6 +167,193 @@ class SegmentedControl(QFrame):
             self.valueChanged.emit(value)
 
 
+class NoWheelComboBox(QComboBox):
+    """Ignore wheel events unless the dropdown is explicitly open."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # type: ignore[override]
+        try:
+            view = self.view()
+        except Exception:
+            view = None
+        if view is not None and view.isVisible():
+            super().wheelEvent(event)
+            return
+        event.ignore()
+
+
+class ThemePreviewCard(QFrame):
+    clicked = Signal(str)
+
+    def __init__(self, theme_id: str, title: str, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.theme_id = theme_id
+        self.setObjectName("ThemePreviewCard")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setProperty("selected", False)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(8)
+        self._root_layout = root
+
+        self.strip = QFrame()
+        self.strip.setObjectName("ThemePreviewStrip")
+        strip_layout = QVBoxLayout(self.strip)
+        strip_layout.setContentsMargins(8, 8, 8, 8)
+        strip_layout.setSpacing(6)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(6)
+        self.accent_dot = QFrame()
+        self.accent_dot.setObjectName("ThemePreviewAccent")
+        self.accent_dot.setFixedSize(10, 10)
+        header_row.addWidget(self.accent_dot)
+        header_row.addStretch(1)
+        strip_layout.addLayout(header_row)
+
+        chip_row = QHBoxLayout()
+        chip_row.setContentsMargins(0, 0, 0, 0)
+        chip_row.setSpacing(6)
+        for txt in ("Cards", "Tables"):
+            chip = QFrame()
+            chip.setObjectName("ThemePreviewChip")
+            chip_layout = QHBoxLayout(chip)
+            chip_layout.setContentsMargins(6, 2, 6, 2)
+            chip_layout.setSpacing(0)
+            lbl = QLabel(txt)
+            lbl.setObjectName("ThemePreviewChipText")
+            chip_layout.addWidget(lbl)
+            chip_row.addWidget(chip)
+        chip_row.addStretch(1)
+        strip_layout.addLayout(chip_row)
+        root.addWidget(self.strip)
+
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("ThemePreviewTitle")
+        root.addWidget(self.title_label)
+
+        self.meta_label = QLabel("")
+        self.meta_label.setObjectName("ThemePreviewMeta")
+        root.addWidget(self.meta_label)
+
+    def set_selected(self, selected: bool) -> None:
+        self.setProperty("selected", bool(selected))
+        repolish(self)
+
+    def set_density_text(self, density_label: str) -> None:
+        self.meta_label.setText(density_label)
+
+    def apply_density(self, density: str) -> None:
+        compact = str(density).strip().lower() == "compact"
+        self._root_layout.setContentsMargins(8 if compact else 10, 8 if compact else 10, 8 if compact else 10, 8 if compact else 10)
+        self._root_layout.setSpacing(6 if compact else 8)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.theme_id)
+        super().mousePressEvent(event)
+
+
+class ToastMessage(QFrame):
+    closed = Signal(object)
+
+    def __init__(self, title: str, kind: str = "info", timeout_ms: int = 3800, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("ToastMessage")
+        self.setProperty("toastKind", kind)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        icon = QLabel(self._icon_for_kind(kind))
+        icon.setObjectName("ToastIcon")
+        layout.addWidget(icon)
+        label = QLabel(title)
+        label.setObjectName("ToastText")
+        label.setWordWrap(True)
+        layout.addWidget(label, 1)
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self.close)
+        self._timer.start(max(800, int(timeout_ms)))
+        repolish(self)
+
+    def _icon_for_kind(self, kind: str) -> str:
+        return {
+            "success": "✓",
+            "warning": "!",
+            "error": "×",
+        }.get(kind, "i")
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        self.close()
+        super().mousePressEvent(event)
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        self.closed.emit(self)
+        super().closeEvent(event)
+
+
+class ToastHost(QWidget):
+    def __init__(self, anchor: QWidget) -> None:
+        super().__init__(anchor)
+        self._anchor = anchor
+        self.setObjectName("ToastHost")
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setVisible(False)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 10, 10, 0)
+        self._layout.setSpacing(8)
+        self._layout.addStretch(1)
+        self._anchor.installEventFilter(self)
+        self._sync_geometry()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # type: ignore[override]
+        if watched is self._anchor and event.type() in {
+            QEvent.Type.Resize,
+            QEvent.Type.Move,
+            QEvent.Type.Show,
+        }:
+            self._sync_geometry()
+        return super().eventFilter(watched, event)
+
+    def _sync_geometry(self) -> None:
+        self.setGeometry(self._anchor.rect())
+        self.raise_()
+
+    def show_toast(self, text: str, *, kind: str = "info", timeout_ms: int = 3800) -> None:
+        self._sync_geometry()
+        toast = ToastMessage(text, kind=kind, timeout_ms=timeout_ms, parent=self)
+        toast.closed.connect(self._on_toast_closed)
+        toast.setMaximumWidth(420)
+        row = QWidget(self)
+        row.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(0)
+        row_layout.addStretch(1)
+        row_layout.addWidget(toast)
+        self._layout.insertWidget(0, row)
+        self.setVisible(True)
+        row.show()
+        toast.show()
+
+    def _on_toast_closed(self, toast_obj: object) -> None:
+        toast = toast_obj if isinstance(toast_obj, ToastMessage) else None
+        if toast is None:
+            return
+        row = toast.parentWidget()
+        if row is not None:
+            row.deleteLater()
+        if self._layout.count() <= 1:
+            self.setVisible(False)
+
+
 class StepItem(QFrame):
     clicked = Signal()
 
@@ -166,6 +375,14 @@ class StepItem(QFrame):
         idx_label.setFixedWidth(24)
         root.addWidget(idx_label)
 
+        self.icon_label = QLabel()
+        self.icon_label.setFixedWidth(18)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon = self._icon_for_step_title(title)
+        if not icon.isNull():
+            self.icon_label.setPixmap(icon.pixmap(16, 16))
+        root.addWidget(self.icon_label)
+
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(2)
@@ -181,6 +398,22 @@ class StepItem(QFrame):
 
         root.addLayout(text_col, 1)
         repolish(self)
+
+    def _icon_for_step_title(self, title: str):
+        style = self.style()
+        title_key = (title or "").strip().lower()
+        pix = None
+        if "inbox" in title_key:
+            pix = getattr(QStyle.StandardPixmap, "SP_DirOpenIcon", QStyle.StandardPixmap.SP_DirIcon)
+        elif "hub" in title_key or "destination" in title_key:
+            pix = getattr(QStyle.StandardPixmap, "SP_DriveHDIcon", QStyle.StandardPixmap.SP_DirIcon)
+        elif "option" in title_key:
+            pix = getattr(QStyle.StandardPixmap, "SP_FileDialogDetailedView", QStyle.StandardPixmap.SP_FileDialogInfoView)
+        elif "run" in title_key:
+            pix = getattr(QStyle.StandardPixmap, "SP_MediaPlay", QStyle.StandardPixmap.SP_ArrowForward)
+        else:
+            pix = QStyle.StandardPixmap.SP_FileDialogInfoView
+        return style.standardIcon(pix)
 
     def set_step_state(self, state: str) -> None:
         self.setProperty("stepState", state)

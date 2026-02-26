@@ -21,6 +21,10 @@ class WizardState:
     file_types: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_FILE_TYPES))
     loop_safety: bool = True
     theme: str = "system"
+    ui_density: str = "comfortable"
+    ui_accent_mode: str = "theme_default"
+    ui_accent_preset: str = "cyan"
+    ui_accent_color: str = ""
     developer_tools: bool = False
 
     @classmethod
@@ -42,6 +46,10 @@ class WizardState:
             file_types=file_types,
             loop_safety=bool(config.get("loop_safety", True)),
             theme=str(config.get("theme", "system")),
+            ui_density=str(config.get("ui_density", "comfortable") or "comfortable"),
+            ui_accent_mode=str(config.get("ui_accent_mode", "theme_default") or "theme_default"),
+            ui_accent_preset=str(config.get("ui_accent_preset", "cyan") or "cyan"),
+            ui_accent_color=str(config.get("ui_accent_color", "") or ""),
             developer_tools=bool(config.get("developer_tools", False)),
         )
 
@@ -56,5 +64,9 @@ class WizardState:
             "file_types": dict(self.file_types),
             "loop_safety": self.loop_safety,
             "theme": self.theme,
+            "ui_density": self.ui_density,
+            "ui_accent_mode": self.ui_accent_mode,
+            "ui_accent_preset": self.ui_accent_preset,
+            "ui_accent_color": self.ui_accent_color,
             "developer_tools": self.developer_tools,
         }

@@ -1430,6 +1430,7 @@ class ProducerOSEngine:
         normalize_pack_name: bool = False,  # reserved for future
         developer_options: Optional[Dict[str, Any]] = None,
         log_callback: Optional[Callable[[str], None]] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         log_to_console: bool = True,
     ) -> Dict[str, Any]:
         """Execute a run.
@@ -1472,6 +1473,18 @@ class ProducerOSEngine:
                 except Exception:
                     pass
 
+        def _emit_progress(phase: str, event: str, **payload: Any) -> None:
+            if progress_callback is None:
+                return
+            data: Dict[str, Any] = {"phase": phase, "event": event}
+            for key, value in payload.items():
+                if value is not None:
+                    data[key] = value
+            try:
+                progress_callback(data)
+            except Exception:
+                pass
+
         run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
         report: Dict[str, Any] = {
             "run_id": run_id,
@@ -1493,13 +1506,16 @@ class ProducerOSEngine:
 
         # ANALYZE: absolutely no filesystem writes
         if mode == "analyze":
+            _emit_progress("scan", "start", packs_done=0, files_done=0)
             packs = self._discover_packs()
+            _emit_progress("scan", "done", packs_total=len(packs), packs_done=len(packs), files_done=0)
+            _emit_progress("classify", "start", packs_total=len(packs), packs_done=0, files_done=0)
             _emit_log(f"Producer OS run_id={run_id} mode={mode}")
             _emit_log(f"Destination root: {self.hub_dir}")
             if content_root != self.hub_dir:
                 _emit_log(f"Organized output root: {content_root}")
             _emit_log(f"Packs discovered: {len(packs)}")
-            for pack_dir in packs:
+            for pack_idx, pack_dir in enumerate(packs, start=1):
                 _emit_log(f"Processing pack: {pack_dir.name}")
                 pack_report: PackReport = {
                     "pack": pack_dir.name,
@@ -1536,12 +1552,36 @@ class ProducerOSEngine:
 
                 report["packs"].append(pack_report)
                 _emit_log(f"Finished pack: {pack_dir.name} files={len(pack_report['files'])}")
+                _emit_progress(
+                    "classify",
+                    "progress",
+                    packs_total=len(packs),
+                    packs_done=pack_idx,
+                    files_done=int(report["files_processed"]),
+                    unsorted=int(report["unsorted"]),
+                )
 
             _emit_log(
                 f"Done. processed={report['files_processed']} "
                 f"failed={report['failed']} unsorted={report['unsorted']} "
                 f"skipped_non_wav={report['files_skipped_non_wav']}"
             )
+            _emit_progress(
+                "classify",
+                "done",
+                packs_total=len(packs),
+                packs_done=len(packs),
+                files_done=int(report["files_processed"]),
+            )
+            _emit_progress(
+                "route",
+                "done",
+                moved=0,
+                copied=0,
+                unsorted=int(report["unsorted"]),
+                message="Analyze only",
+            )
+            _emit_progress("write", "done", message="No writes")
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
             return report
 
@@ -1563,6 +1603,8 @@ class ProducerOSEngine:
             self._wrap_loose_files()
 
         if mode == "repair-styles":
+            _emit_progress("scan", "done", message="Repair styles")
+            _emit_progress("write", "start", message="Repairing styles")
             actions = self.repair_styles()
             report["repair_actions"] = actions
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
@@ -1571,9 +1613,23 @@ class ProducerOSEngine:
             if write_hub:
                 self._save_feature_cache()
                 report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
+            _emit_progress("write", "done", message="Styles repaired")
             return report
 
+        _emit_progress("scan", "start", packs_done=0, files_done=0)
         packs = self._discover_packs()
+        _emit_progress("scan", "done", packs_total=len(packs), packs_done=len(packs), files_done=0)
+        _emit_progress("classify", "start", packs_total=len(packs), packs_done=0, files_done=0)
+        _emit_progress(
+            "route",
+            "start",
+            packs_total=len(packs),
+            packs_done=0,
+            files_done=0,
+            moved=0,
+            copied=0,
+            unsorted=0,
+        )
 
         audit_file = None
         audit_writer = None
@@ -1598,7 +1654,7 @@ class ProducerOSEngine:
                 audit_writer = csv.writer(audit_file)
                 audit_writer.writerow(["file", "pack", "category", "bucket", "confidence", "action", "reason"])
 
-            for pack_dir in packs:
+            for pack_idx, pack_dir in enumerate(packs, start=1):
                 transfer_pack_report: PackReport = {
                     "pack": pack_dir.name,
                     "files": [],
@@ -1677,6 +1733,23 @@ class ProducerOSEngine:
                         )
 
                 _log(f"Finished pack: {pack_dir.name} files={len(transfer_pack_report['files'])}")
+                _emit_progress(
+                    "classify",
+                    "progress",
+                    packs_total=len(packs),
+                    packs_done=pack_idx,
+                    files_done=int(report["files_processed"]),
+                )
+                _emit_progress(
+                    "route",
+                    "progress",
+                    packs_total=len(packs),
+                    packs_done=pack_idx,
+                    files_done=int(report["files_processed"]),
+                    moved=int(report["files_moved"]),
+                    copied=int(report["files_copied"]),
+                    unsorted=int(report["unsorted"]),
+                )
 
                 report["packs"].append(transfer_pack_report)
 
@@ -1686,12 +1759,30 @@ class ProducerOSEngine:
                 f"failed={report['failed']} unsorted={report['unsorted']} "
                 f"skipped={report['skipped_existing']}"
             )
+            _emit_progress(
+                "classify",
+                "done",
+                packs_total=len(packs),
+                packs_done=len(packs),
+                files_done=int(report["files_processed"]),
+            )
+            _emit_progress(
+                "route",
+                "done",
+                packs_total=len(packs),
+                packs_done=len(packs),
+                files_done=int(report["files_processed"]),
+                moved=int(report["files_moved"]),
+                copied=int(report["files_copied"]),
+                unsorted=int(report["unsorted"]),
+            )
 
         finally:
             if audit_file:
                 audit_file.close()
             if log_handle:
                 log_handle.close()
+        _emit_progress("write", "start", message="Writing reports/cache")
         if write_logs and report_path:
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
             report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -1701,6 +1792,14 @@ class ProducerOSEngine:
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
         else:
             report["feature_cache_stats"] = self._feature_cache_stats_snapshot()
+        _emit_progress(
+            "write",
+            "done",
+            message="Finished",
+            moved=int(report["files_moved"]),
+            copied=int(report["files_copied"]),
+            unsorted=int(report["unsorted"]),
+        )
 
         return report
 

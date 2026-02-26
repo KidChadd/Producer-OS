@@ -14,7 +14,27 @@
     },
     "theme": {
       "type": "string",
-      "description": "UI theme (dark, light, system)"
+      "description": "UI theme preset (system, studio_dark, paper_light, midnight_blue; dark/light aliases still load)"
+    },
+    "ui_density": {
+      "type": "string",
+      "enum": ["comfortable", "compact"],
+      "description": "UI density mode for spacing and table layout"
+    },
+    "ui_accent_mode": {
+      "type": "string",
+      "enum": ["theme_default", "preset", "custom"],
+      "description": "Accent color source mode"
+    },
+    "ui_accent_preset": {
+      "type": "string",
+      "enum": ["cyan", "blue", "emerald", "amber", "rose"],
+      "description": "Accent preset id when ui_accent_mode is preset"
+    },
+    "ui_accent_color": {
+      "type": "string",
+      "pattern": "^#?[0-9A-Fa-f]{6}$",
+      "description": "Custom accent color (#RRGGBB) when ui_accent_mode is custom"
     },
     "ignore_rules": {
       "type": "array",

@@ -12,6 +12,7 @@ class EngineRunner(QObject):
 
     finished = Signal(dict, str)
     logLine = Signal(str)
+    progressEvent = Signal(dict)
 
     def __init__(self, engine: ProducerOSEngine, mode: str) -> None:
         super().__init__()
@@ -23,7 +24,12 @@ class EngineRunner(QObject):
         thread.start()
 
     def _run(self) -> None:
-        report = self.engine.run(mode=self.mode, log_callback=self.logLine.emit, log_to_console=False)
+        report = self.engine.run(
+            mode=self.mode,
+            log_callback=self.logLine.emit,
+            progress_callback=self.progressEvent.emit,
+            log_to_console=False,
+        )
 
         run_id = report.get("run_id")
         hub_dir = self.engine.hub_dir

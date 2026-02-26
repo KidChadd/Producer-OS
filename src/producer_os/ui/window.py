@@ -10,7 +10,6 @@ from PySide6.QtCore import QSignalBlocker, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -19,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -31,8 +31,17 @@ from producer_os.ui.animations import slide_fade_in
 from producer_os.ui.engine_runner import EngineRunner
 from producer_os.ui.pages import HubPage, InboxPage, OptionsPage, RunPage
 from producer_os.ui.state import WizardState
-from producer_os.ui.theme import apply_app_theme
-from producer_os.ui.widgets import StatusBadge, StepSidebar, set_widget_role
+from producer_os.ui.theme import (
+    THEME_PRESET_CHOICES,
+    THEME_PRESET_LABELS,
+    apply_app_theme,
+    normalize_accent_color,
+    normalize_accent_mode,
+    normalize_accent_preset,
+    normalize_theme_name,
+    normalize_ui_density,
+)
+from producer_os.ui.widgets import NoWheelComboBox, StatusBadge, StepSidebar, ToastHost, set_widget_role
 
 
 class ProducerOSWindow(QMainWindow):
@@ -69,10 +78,12 @@ class ProducerOSWindow(QMainWindow):
         self._current_step_index = 0
 
         self._build_shell(app_icon)
+        self.toast_host = ToastHost(self.content_surface)
         self._create_pages()
         self._wire_signals()
         self._initialize_state()
         self._sync_theme_controls(self.state.theme)
+        self._sync_appearance_controls()
         self._apply_theme_only(self.state.theme)
         self._set_status("Ready", kind="neutral", pulsing=False)
         self._set_current_step(0, animate=False)
@@ -121,14 +132,17 @@ class ProducerOSWindow(QMainWindow):
 
         self.header_open_config_btn = QPushButton("Config")
         set_widget_role(self.header_open_config_btn, "ghost")
+        self.header_open_config_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
         top_layout.addWidget(self.header_open_config_btn)
 
         self.header_open_report_btn = QPushButton("Last Report")
         set_widget_role(self.header_open_report_btn, "ghost")
+        self.header_open_report_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
         top_layout.addWidget(self.header_open_report_btn)
 
-        self.header_theme_combo = QComboBox()
-        self.header_theme_combo.addItems(["system", "dark", "light"])
+        self.header_theme_combo = NoWheelComboBox()
+        for theme_value in THEME_PRESET_CHOICES:
+            self.header_theme_combo.addItem(THEME_PRESET_LABELS.get(theme_value, theme_value), theme_value)
         top_layout.addWidget(self.header_theme_combo)
 
         self.header_status_badge = StatusBadge("Ready")
@@ -167,8 +181,10 @@ class ProducerOSWindow(QMainWindow):
 
         self.prev_btn = QPushButton("Back")
         set_widget_role(self.prev_btn, "ghost")
+        self.prev_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowBack))
         self.next_btn = QPushButton("Next")
         set_widget_role(self.next_btn, "primary")
+        self.next_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward))
         footer_layout.addWidget(self.prev_btn)
         footer_layout.addWidget(self.next_btn)
 
@@ -182,6 +198,10 @@ class ProducerOSWindow(QMainWindow):
             preserve_vendor=self.state.preserve_vendor,
             loop_safety=self.state.loop_safety,
             theme=self.state.theme,
+            ui_density=self.state.ui_density,
+            ui_accent_mode=self.state.ui_accent_mode,
+            ui_accent_preset=self.state.ui_accent_preset,
+            ui_accent_color=self.state.ui_accent_color,
             developer_tools=self.state.developer_tools,
         )
         self.run_page = RunPage(action=self.state.action)
@@ -197,7 +217,9 @@ class ProducerOSWindow(QMainWindow):
 
         self.header_open_config_btn.clicked.connect(self.open_config_folder)
         self.header_open_report_btn.clicked.connect(self.open_last_report)
-        self.header_theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        self.header_theme_combo.currentIndexChanged.connect(
+            lambda _idx: self.on_theme_changed(str(self.header_theme_combo.currentData() or "system"))
+        )
 
         self.inbox_page.browseRequested.connect(self.browse_inbox)
         self.inbox_page.inboxPathChanged.connect(self.on_inbox_path_changed)
@@ -212,6 +234,10 @@ class ProducerOSWindow(QMainWindow):
         self.options_page.preserveVendorChanged.connect(self.on_preserve_vendor_changed)
         self.options_page.loopSafetyChanged.connect(self.on_loop_safety_changed)
         self.options_page.themeChanged.connect(self.on_theme_changed)
+        self.options_page.uiDensityChanged.connect(self.on_ui_density_changed)
+        self.options_page.accentModeChanged.connect(self.on_accent_mode_changed)
+        self.options_page.accentPresetChanged.connect(self.on_accent_preset_changed)
+        self.options_page.accentColorChanged.connect(self.on_accent_color_changed)
         self.options_page.developerToolsChanged.connect(self.on_dev_tools_changed)
         self.options_page.openConfigRequested.connect(self.open_config_folder)
         self.options_page.openLogsRequested.connect(self.open_logs_folder)
@@ -232,6 +258,8 @@ class ProducerOSWindow(QMainWindow):
         self.update_hub_warning()
         self.run_page.set_action(self.state.action)
         self.options_page.set_developer_tools_visible(self.state.developer_tools, animate=False)
+        self._apply_density_to_pages(self.state.ui_density)
+        self._sync_appearance_controls()
         self._refresh_troubleshooting_status()
         self._refresh_bucket_customization_editor()
 
@@ -268,13 +296,11 @@ class ProducerOSWindow(QMainWindow):
 
     def update_nav_buttons(self) -> None:
         idx = self._current_step_index
+        is_run_step = idx == self.stack.count() - 1
         self.prev_btn.setEnabled(idx > 0)
-        self.next_btn.setEnabled(idx < self.stack.count() - 1)
-        if idx == self.stack.count() - 1:
-            self.next_btn.setText("Run Page")
-            self.next_btn.setEnabled(False)
-        else:
-            self.next_btn.setText("Next")
+        self.next_btn.setVisible(not is_run_step)
+        self.next_btn.setText("Next")
+        self.next_btn.setEnabled(not is_run_step)
 
     def _update_footer_hint(self) -> None:
         hints = [
@@ -297,26 +323,109 @@ class ProducerOSWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Theme handling
     def _sync_theme_controls(self, theme: str) -> None:
+        theme = normalize_theme_name(theme)
         for combo in (self.header_theme_combo, self.options_page.theme_combo):
-            idx = combo.findText(theme)
+            idx = combo.findData(theme)
             if idx >= 0:
                 with QSignalBlocker(combo):
                     combo.setCurrentIndex(idx)
+        try:
+            self.options_page.refresh_theme_previews()
+        except Exception:
+            pass
+
+    def _sync_appearance_controls(self) -> None:
+        self.state.ui_density = normalize_ui_density(self.state.ui_density)
+        self.state.ui_accent_mode = normalize_accent_mode(self.state.ui_accent_mode)
+        self.state.ui_accent_preset = normalize_accent_preset(self.state.ui_accent_preset)
+        self.state.ui_accent_color = normalize_accent_color(self.state.ui_accent_color)
+        try:
+            self.options_page.set_ui_density_value(self.state.ui_density)
+            self.options_page.set_accent_settings(
+                self.state.ui_accent_mode,
+                self.state.ui_accent_preset,
+                self.state.ui_accent_color,
+            )
+        except Exception:
+            pass
+
+    def _apply_density_to_pages(self, density: str) -> None:
+        density = normalize_ui_density(density)
+        compact = density == "compact"
+        try:
+            root = self.centralWidget()
+            if isinstance(root, QWidget):
+                root.layout().setContentsMargins(12 if compact else 16, 12 if compact else 16, 12 if compact else 16, 12 if compact else 16)
+                root.layout().setSpacing(10 if compact else 12)
+        except Exception:
+            pass
+        try:
+            self.step_sidebar.setFixedWidth(270 if compact else 290)
+        except Exception:
+            pass
+        try:
+            self.content_surface.layout().setContentsMargins(10 if compact else 14, 10 if compact else 14, 10 if compact else 14, 10 if compact else 14)
+        except Exception:
+            pass
+        for page in getattr(self, "pages", []):
+            if hasattr(page, "apply_density"):
+                try:
+                    page.apply_density(density)
+                except Exception:
+                    pass
 
     def _apply_theme_only(self, theme: str) -> None:
         app_instance = QApplication.instance()
         if app_instance is None:
             return
         app = cast(QApplication, app_instance)
-        apply_app_theme(app, theme)
+        apply_app_theme(
+            app,
+            theme,
+            density=self.state.ui_density,
+            accent_mode=self.state.ui_accent_mode,
+            accent_preset=self.state.ui_accent_preset,
+            accent_color=self.state.ui_accent_color,
+        )
+        try:
+            self.options_page.refresh_theme_previews()
+        except Exception:
+            pass
 
     def on_theme_changed(self, theme: str) -> None:
-        if theme not in {"system", "dark", "light"}:
-            theme = "system"
+        theme = normalize_theme_name(theme)
         self.state.theme = theme
         self._sync_theme_controls(theme)
         self._apply_theme_only(theme)
         self.save_setting("theme", theme)
+
+    def on_ui_density_changed(self, density: str) -> None:
+        density = normalize_ui_density(density)
+        self.state.ui_density = density
+        self._apply_density_to_pages(density)
+        self._apply_theme_only(self.state.theme)
+        self.save_setting("ui_density", density)
+
+    def on_accent_mode_changed(self, mode: str) -> None:
+        mode = normalize_accent_mode(mode)
+        self.state.ui_accent_mode = mode
+        self._sync_appearance_controls()
+        self._apply_theme_only(self.state.theme)
+        self.save_setting("ui_accent_mode", mode)
+
+    def on_accent_preset_changed(self, preset: str) -> None:
+        preset = normalize_accent_preset(preset)
+        self.state.ui_accent_preset = preset
+        self._sync_appearance_controls()
+        self._apply_theme_only(self.state.theme)
+        self.save_setting("ui_accent_preset", preset)
+
+    def on_accent_color_changed(self, color: str) -> None:
+        color = normalize_accent_color(color)
+        self.state.ui_accent_color = color
+        self._sync_appearance_controls()
+        self._apply_theme_only(self.state.theme)
+        self.save_setting("ui_accent_color", color)
 
     # ------------------------------------------------------------------
     # Inbox page
@@ -503,7 +612,7 @@ class ProducerOSWindow(QMainWindow):
             self.config_service.load_styles()
             self.config_service.load_buckets()
             self.config_service.load_bucket_hints()
-            QMessageBox.information(self, "Schema validation", "All configuration files are valid.")
+            self._toast("All configuration files are valid.", kind="success")
         except Exception as exc:
             QMessageBox.warning(self, "Schema validation", f"Validation failed: {exc}")
 
@@ -518,21 +627,21 @@ class ProducerOSWindow(QMainWindow):
                 status_parts.append(f"{name}:missing ({exc.__class__.__name__})")
         summary = ", ".join(status_parts)
         self.options_page.set_audio_dependencies_status(summary)
-        QMessageBox.information(self, "Audio dependencies", summary)
+        self._toast("Audio dependency check completed.", kind="info")
 
     def qt_plugin_check(self) -> None:
         try:
             if not getattr(sys, "frozen", False):
                 msg = "Source run detected. Qt platform plugin checks are primarily for packaged builds."
                 self.options_page.set_qt_plugin_status(msg)
-                QMessageBox.information(self, "Qt plugin check", msg)
+                self._toast("Qt plugin check completed (source run).", kind="info")
                 return
             exe_dir = Path(sys.executable).resolve().parent
             matches = list(exe_dir.rglob("qwindows.dll"))
             if matches:
                 msg = f"Found qwindows.dll at {matches[0]}"
                 self.options_page.set_qt_plugin_status("qwindows.dll found")
-                QMessageBox.information(self, "Qt plugin check", msg)
+                self._toast("Qt plugin found in packaged app directory.", kind="success")
             else:
                 msg = "qwindows.dll not found under the application directory."
                 self.options_page.set_qt_plugin_status("qwindows.dll not found")
@@ -684,11 +793,7 @@ class ProducerOSWindow(QMainWindow):
                 "Saved bucket names/colors. Changes apply to future runs and style writes.",
                 success=True,
             )
-            QMessageBox.information(
-                self,
-                "Bucket customization",
-                "Bucket names and colors saved successfully.\n\nRerun analyze/copy/move to apply changes.",
-            )
+            self._toast("Bucket customizations saved. Rerun analyze/copy/move to apply.", kind="success", timeout_ms=4200)
         except Exception as exc:
             self.options_page.set_bucket_customization_status(f"Save failed: {exc}", success=False)
             QMessageBox.warning(self, "Bucket customization", f"Failed to save bucket customizations:\n{exc}")
@@ -737,6 +842,7 @@ class ProducerOSWindow(QMainWindow):
             if token in {str(v).strip().lower() for v in bucket_values}:
                 self.run_page.set_review_feedback(f"Hint already exists: {kind} '{token}' -> {bucket}", success=True)
                 self.run_page.record_saved_hint(source, kind, bucket, token)
+                self._toast(f"Hint already exists: {token} -> {bucket}", kind="info")
                 return
             bucket_values.append(token)
             bucket_values[:] = sorted({str(v).strip().lower() for v in bucket_values if str(v).strip()})
@@ -744,13 +850,21 @@ class ProducerOSWindow(QMainWindow):
             self.config_service.save_bucket_hints(hints)
             self.run_page.record_saved_hint(source, kind, bucket, token)
             self.run_page.set_review_feedback(f"Saved {kind} hint '{token}' -> {bucket}. Rerun to apply.", success=True)
+            self._toast(f"Saved {kind} hint '{token}' -> {bucket}. Rerun to apply.", kind="success", timeout_ms=4200)
         except Exception as exc:
             self.run_page.set_review_feedback(f"Failed to save hint: {exc}", success=False)
+            self._toast("Failed to save hint.", kind="warning")
 
     # ------------------------------------------------------------------
     # Run page / engine execution
     def _set_status(self, text: str, kind: str, pulsing: bool) -> None:
         self.header_status_badge.set_status(text, kind=kind, pulsing=pulsing)
+
+    def _toast(self, text: str, kind: str = "info", timeout_ms: int = 3600) -> None:
+        try:
+            self.toast_host.show_toast(text, kind=kind, timeout_ms=timeout_ms)
+        except Exception:
+            pass
 
     def _valid_inbox_path(self) -> bool:
         path_str = self.state.inbox_path
@@ -810,12 +924,19 @@ class ProducerOSWindow(QMainWindow):
         self._last_engine_bucket_ids = list(engine.BUCKET_RULES.keys())
         self.engine_runner = EngineRunner(engine, mode)
         self.engine_runner.logLine.connect(self.on_engine_log_line)
+        self.engine_runner.progressEvent.connect(self.on_engine_progress_event)
         self.engine_runner.finished.connect(self.on_engine_finished)
         self.engine_runner.start()
 
     def on_engine_log_line(self, line: str) -> None:
         try:
             self.run_page.append_log_line(line)
+        except Exception:
+            pass
+
+    def on_engine_progress_event(self, payload: dict) -> None:
+        try:
+            self.run_page.update_progress_event(dict(payload or {}))
         except Exception:
             pass
 
@@ -834,7 +955,17 @@ class ProducerOSWindow(QMainWindow):
             counts_str = ", ".join(f"{bucket}: {count}" for bucket, count in counts.items())
             log_lines.append(f"{pack['pack']}: {counts_str}")
 
-        self.run_page.set_results(report, log_lines, bucket_choices=self._last_engine_bucket_ids)
+        bucket_colors = {
+            str(bucket_id): str((style or {}).get("Color", ""))
+            for bucket_id, style in dict((self.styles_data.get("buckets", {}) or {})).items()
+            if isinstance(style, dict)
+        }
+        self.run_page.set_results(
+            report,
+            log_lines,
+            bucket_choices=self._last_engine_bucket_ids,
+            bucket_colors=bucket_colors,
+        )
         if report.get("failed", 0):
             self._set_status("Completed with warnings", kind="warning", pulsing=False)
         else:
@@ -858,6 +989,6 @@ class ProducerOSWindow(QMainWindow):
                 Path(dest).write_text(json.dumps(data, indent=2), encoding="utf-8")
             else:
                 Path(dest).write_text(json.dumps(export_payload, indent=2), encoding="utf-8")
-            QMessageBox.information(self, "Save report", "Report saved successfully.")
+            self._toast("Run report saved successfully.", kind="success")
         except Exception as exc:
             QMessageBox.warning(self, "Save report", f"Failed to save report: {exc}")
